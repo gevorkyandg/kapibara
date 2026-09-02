@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <!-- user-scalable=no: во время управления игру нельзя случайно зазумить
+         двумя пальцами. viewport-fit=cover — под «чёлку» на телефонах. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Капибара: приключение</title>
+
+    <!--
+      SDK Яндекс Игр. Грузится ДО игры: платформа должна успеть подняться,
+      прежде чем мы скажем ей «игра готова».
+      Вне Яндекса (локально, на другом портале) файл просто не загрузится —
+      игра это переживёт и запустится в локальном режиме, см. src/platform/.
+    -->
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #7ec8e3;
+        /* Долгое нажатие не выделяет текст и не зовёт системное меню —
+           требование модерации Яндекса. */
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        width: 100%;
+        height: 100%;
+        /* браузер не перехватывает свайпы — их получает игра */
+        touch-action: none;
+      }
+      canvas {
+        display: block;
+      }
+      /* Заставка до первого кадра Phaser: игрок не смотрит в пустой экран. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 28px/1.4 system-ui, sans-serif;
+        color: #4a3524;
+        background: #7ec8e3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="boot">...</div>
+    <script>
+      // Контекстное меню на игровом поле — частая причина отказа модерации.
+      window.addEventListener('contextmenu', (e) => e.preventDefault());
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
