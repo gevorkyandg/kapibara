@@ -53,4 +53,22 @@ initPlatform().then(() => {
   platform.onResume(() => {
     resumeAudio();
   });
+
+  /**
+   * Разбудить игру после возвращения в окно.
+   *
+   * Свернули окно — браузер перестаёт давать кадры, и Phaser усыпляет свой
+   * цикл. Иногда он не просыпается сам: картинка остаётся (видно меню паузы),
+   * но кадры не идут, а вместе с ними не обрабатывается и ввод — кнопки не
+   * нажимаются. Поэтому будим цикл руками на каждое возвращение фокуса.
+   */
+  const wakeUp = () => {
+    if (document.hidden) return;
+    game.loop.wake();
+    game.input.enabled = true;
+  };
+
+  window.addEventListener('focus', wakeUp);
+  window.addEventListener('pageshow', wakeUp);
+  document.addEventListener('visibilitychange', wakeUp);
 });

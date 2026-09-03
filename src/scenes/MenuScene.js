@@ -6,6 +6,8 @@ import { createCapybara } from '../capybara.js';
 import {
   getSave,
   getLevel,
+  addXp,
+  addCoins,
   getStats,
   getMaxLives,
   hasItem,
@@ -210,6 +212,42 @@ export class MenuScene extends Phaser.Scene {
       edge: COLORS.greenEdge,
       fontSize: 34,
     });
+
+    // Временные кнопки для тестирования (DEBUG.cheats в config.js).
+    // Перед публикацией флаг выключается, и кнопок нет.
+    if (DEBUG.cheats) {
+      makeButton(
+        this,
+        x - 100,
+        640,
+        180,
+        56,
+        t('cheatLevel'),
+        () => {
+          // Ровно столько опыта, сколько нужно до следующего уровня.
+          const level = getLevel();
+          if (level >= MAX_LEVEL) return;
+          addXp(xpForLevel(level + 1) - getSave().xp);
+          flush();
+          this.scene.restart();
+        },
+        { fill: COLORS.panel, edge: COLORS.panelEdge, fontSize: 22 }
+      );
+      makeButton(
+        this,
+        x + 100,
+        640,
+        180,
+        56,
+        t('cheatCoins'),
+        () => {
+          addCoins(10);
+          flush();
+          this.scene.restart();
+        },
+        { fill: COLORS.panel, edge: COLORS.panelEdge, fontSize: 22 }
+      );
+    }
 
     this.soundBtn = makeButton(
       this,

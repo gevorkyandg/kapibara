@@ -203,10 +203,11 @@ export class ShopScene extends Phaser.Scene {
       state.setText(
         locked ? t('needLevel', { n: item.minLevel }) : t('boughtOf', { n: bought, m: MAX_BOUGHT_LIVES })
       );
+      const affordable = getSave().coins >= item.price;
       price.value.setText(String(item.price));
       price.setAlpha(maxed ? 0.35 : 1);
       btn.label.setText(maxed ? t('bought') : t('buy'));
-      btn.setEnabled(!maxed && !locked);
+      btn.setEnabled(!maxed && !locked && affordable);
       return;
     }
 
@@ -234,11 +235,13 @@ export class ShopScene extends Phaser.Scene {
     state.setText(lines.join('\n'));
 
     const nextPrice = owned && !maxed ? upgradePrice(item, ability.level) : item.price;
+    const affordable = getSave().coins >= nextPrice;
     price.value.setText(String(nextPrice));
     price.setAlpha(maxed ? 0.35 : 1);
 
     btn.label.setText(maxed ? t('bought') : owned ? t('upgrade') : t('buy'));
-    btn.setEnabled(!maxed && !locked);
+    // Не хватает монет — кнопка серая: понятно до нажатия, а не после.
+    btn.setEnabled(!maxed && !locked && affordable);
   }
 
   /** Точки-деления: сколько улучшений уже куплено из возможных. */

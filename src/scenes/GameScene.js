@@ -320,11 +320,17 @@ export class GameScene extends Phaser.Scene {
       this.hearts.push(fixed(this.add.image(44 + i * 42, 104, 'heart').setScale(0.85)));
     }
 
+    // Общий кошелёк рядом со счётчиком этапа: слева собрано на этапе,
+    // справа — сколько монеток всего. Рогатка тратит именно их.
+    fixed(panel(this, 420, 46, 240, 62, COLORS.panel, COLORS.panelEdge));
+    this.walletBadge = fixed(coinBadge(this, 322, 46, String(getSave().coins), 34));
+
     // Таймер этапа — по ТЗ он идёт с начала и замирает на паузе.
-    fixed(panel(this, GAME_WIDTH / 2, 44, 190, 58, COLORS.panel, COLORS.panelEdge));
+    const timerX = GAME_WIDTH / 2 + 180;
+    fixed(panel(this, timerX, 44, 190, 58, COLORS.panel, COLORS.panelEdge));
     this.timerText = fixed(
       this.add
-        .text(GAME_WIDTH / 2, 44, '00:00', {
+        .text(timerX, 44, '00:00', {
           fontFamily: FONT,
           fontSize: '32px',
           color: COLORS.ink,
@@ -425,6 +431,11 @@ export class GameScene extends Phaser.Scene {
 
     this.currentLevel = this.levelAtStart;
     this.refreshXpBar();
+  }
+
+  /** Монетки в кошельке: их тратит рогатка, поэтому число всегда на виду. */
+  refreshWallet() {
+    this.walletBadge.value.setText(String(getSave().coins));
   }
 
   refreshXpBar() {
@@ -656,10 +667,20 @@ export class GameScene extends Phaser.Scene {
     // Упала в пропасть
     if (this.player.y > this.worldH + 120) this.hurt(time, true);
 
+    // Сторож от застревания: капибара внутри блока двигаться не может, и
+    // выбраться сама не сумеет — вытаскиваем её наверх.
+    if (this.overlapsSolid(this.player.x, this.player.y)) {
+      const место = this.freeSpotAbove(this.player.x, this.player.y);
+      this.player.setPosition(место.x, место.y);
+      this.player.setVelocity(0, 0);
+    }
+
     // Точка возврата: последнее место, где капибара спокойно стояла на земле.
     if (onFloor && time - this.lastCheckpointAt > 400 && Math.abs(body.velocity.y) < 40) {
       this.lastCheckpointAt = time;
-      this.checkpoint = { x: this.player.x, y: this.player.y - 10 };
+      const x = this.player.x;
+      const y = this.player.y - 10;
+      if (!this.overlapsSolid(x, y)) this.checkpoint = { x, y };
     }
   }
 
@@ -800,6 +821,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     addCoins(-this.sling.coinCost);
+    this.refreshWallet();
     this.slingReadyAt = time + this.sling.cooldown;
 
     const pebble = this.pebbles.create(this.player.x + this.facing * 34, this.player.y - 20, 'pebble');
@@ -831,6 +853,32 @@ export class GameScene extends Phaser.Scene {
       w.setVelocityX(60 * w.dir);
       w.setFlipX(w.dir < 0);
     });
+  }
+
+  /**
+   * Задевает ли тело капибары сплошной блок, стоя в этой точке.
+   * Тело 52×56, проверяем девять точек — этого хватает, чтобы поймать
+   * застревание в стене.
+   */
+  overlapsSolid(x, y) {
+    for (const px of [x - 22, x, x + 22]) {
+      for (const py of [y - 24, y, y + 24]) {
+        if (this.isSolidAtPixel(px, py)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Ближайшее свободное место над точкой. Страховка от застревания: если
+   * контрольная точка оказалась в стене (кривой кусок карты, край платформы),
+   * герой должен всё равно очнуться в воздухе, а не внутри блока.
+   */
+  freeSpotAbove(x, y) {
+    for (let dy = 0; dy <= 300; dy += 20) {
+      if (!this.overlapsSolid(x, y - dy)) return { x, y: y - dy };
+    }
+    return { ...this.startPos };
   }
 
   /** Есть ли опора в этой точке мира (по карте символов, без физики). */
@@ -911,6 +959,7 @@ export class GameScene extends Phaser.Scene {
     coin.disableBody(true, true);
     this.coinsCollected += 1;
     this.coinBadge.value.setText(`${this.coinsCollected} / ${this.totalCoins}`);
+    this.refreshWallet();
     sfx.coin();
     this.puff(coin.x, coin.y, 0xffd451);
   }
@@ -988,9 +1037,10 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(180, 0.008);
     this.cameras.main.flash(200, 255, 180, 180);
 
+    const место = this.freeSpotAbove(this.checkpoint.x, this.checkpoint.y);
     this.player.setVelocity(0, 0);
-    this.player.setPosition(this.checkpoint.x, this.checkpoint.y);
-    this.capy.setPosition(this.checkpoint.x, this.checkpoint.y);
+    this.player.setPosition(место.x, место.y);
+    this.capy.setPosition(место.x, место.y);
 
     if (this.lives <= 0) {
       this.failStage();
