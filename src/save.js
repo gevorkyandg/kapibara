@@ -22,7 +22,7 @@ const DEFAULT_SAVE = {
   coins: 0,
   xp: 0,
   items: { doubleJump: false, speedBoost: false, cloak: false, slingshot: false },
-  upgrades: { doubleJump: 0, speedBoost: 0, slingshot: 0 }, // сколько раз улучшено
+  upgrades: { doubleJump: 0, speedBoost: 0, cloak: 0, slingshot: 0 }, // сколько раз улучшено
   extraLives: 0, // купленные жизни, 0..MAX_BOUGHT_LIVES
   levels: {}, // { "0": { stars: 0..3, best: 0..1, bestTime: мс } }
   stats: { playMs: 0, coins: 0, treats: 0, monsters: 0, stages: 0 },
@@ -164,12 +164,21 @@ export function getAbility(id) {
   const base = ABILITIES[id];
   const level = getUpgrade(id);
   const up = base.upgrades || {};
+  const floor = up.minCooldown ?? MIN_COOLDOWN;
+
   return {
     level,
     maxLevel: up.max ?? 0,
-    cooldown: Math.max(MIN_COOLDOWN, base.cooldown - level * (up.cooldownStep || 0)),
+    cooldown: Math.max(floor, base.cooldown - level * (up.cooldownStep || 0)),
     duration: base.duration ? base.duration + level * (up.durationStep || 0) : 0,
     multiplier: base.multiplier,
+    fallSpeed: base.fallSpeed,
+    coinCost: base.coinCost,
+    // Рогатка: с каждым улучшением монетка летит быстрее и ровнее, на
+    // последнем — почти без дуги.
+    speed: base.speed ? base.speed + level * (up.speedStep || 0) : 0,
+    liftOff: base.liftOff || 0,
+    gravity: base.gravity != null ? Math.max(0, base.gravity + level * (up.gravityStep || 0)) : 0,
   };
 }
 
@@ -243,9 +252,15 @@ export function getStats() {
   return data.stats;
 }
 
-/** Сброс статистики (ТЗ: с подтверждением). Прогресс этапов не трогаем. */
-export function resetStats() {
-  data.stats = { ...DEFAULT_SAVE.stats, stages: countPassedStages() };
+/**
+ * Полный сброс прогресса — кнопка для тестирования (DEBUG.statsReset).
+ * Стирает всё: опыт и уровень, монеты, покупки с улучшениями, звёзды за
+ * этапы и статистику. Настройку звука оставляем — она к прогрессу не относится.
+ */
+export function resetProgress() {
+  const sound = data.sound;
+  data = structuredClone(DEFAULT_SAVE);
+  data.sound = sound;
   markDirty();
   flush();
 }

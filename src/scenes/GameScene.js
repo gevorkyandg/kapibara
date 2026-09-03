@@ -85,12 +85,19 @@ export class GameScene extends Phaser.Scene {
     // Числа способностей — с учётом улучшений из магазина.
     this.boost = getAbility('speedBoost');
     this.doubleJump = getAbility('doubleJump');
+    this.cloak = getAbility('cloak');
+    this.sling = getAbility('slingshot');
 
     // Состояние умений. Время везде — игровое (мс от старта сцены).
     this.airJumpUsed = false;
     this.doubleJumpReadyAt = 0;
     this.boostUntil = 0;
     this.boostReadyAt = 0;
+    this.cloakActive = false;
+    this.cloakUntil = 0;
+    this.cloakReadyAt = 0;
+    this.jumpReleasedInAir = false;
+    this.slingReadyAt = 0;
     this.invulnUntil = 0;
     this.lastFloorTime = -9999;
     this.jumpBufferedAt = -9999;
@@ -138,6 +145,7 @@ export class GameScene extends Phaser.Scene {
     this.walkers = this.physics.add.group();
     this.flyers = this.physics.add.group({ allowGravity: false, immovable: true });
     this.hazards = []; // прямоугольники шипов: проверяем их вручную, так проще
+    this.pebbles = this.physics.add.group(); // монетки из рогатки
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
@@ -275,6 +283,9 @@ export class GameScene extends Phaser.Scene {
     this.capy = createCapybara(this, x, y, 0.62);
     this.capy.setDepth(6);
 
+    // Парашют плаща висит над капибарой и показывается только в планировании.
+    this.chute = this.add.image(x, y - 46, 'chute').setDepth(5).setVisible(false);
+
     this.checkpoint = { x, y };
   }
 
@@ -286,6 +297,10 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
+    this.physics.add.collider(this.pebbles, this.solids, (pebble) => pebble.destroy());
+    this.physics.add.overlap(this.pebbles, this.walkers, (pebble, e) => this.pebbleHit(pebble, e));
+    this.physics.add.overlap(this.pebbles, this.flyers, (pebble, e) => this.pebbleHit(pebble, e));
+
     if (this.flag) {
       this.physics.add.overlap(this.player, this.flag, () => this.finishLevel());
     }
@@ -334,6 +349,8 @@ export class GameScene extends Phaser.Scene {
     const abilities = [
       { id: 'doubleJump', key: 'icon-jump' },
       { id: 'speedBoost', key: 'icon-boost' },
+      { id: 'cloak', key: 'icon-cloak' },
+      { id: 'slingshot', key: 'icon-slingshot' },
     ].filter((a) => hasItem(a.id));
 
     abilities.forEach((a, i) => {
@@ -536,19 +553,22 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Подсказка по управлению в начале первого этапа — с учётом покупок. */
   useTouchHint() {
     if (this.levelIndex > 0) return '';
     const lines = [t('hintMove'), t('hintJump')];
     if (hasItem('speedBoost')) lines.push(t('hintBoost'));
+    if (hasItem('cloak')) lines.push(t('hintCloak'));
+    if (hasItem('slingshot')) lines.push(t('hintFire'));
     return lines.join('\n');
   }
 
   createControls() {
     this.cursors = this.input.keyboard.createCursorKeys();
     // Буквы читаются по физической клавише, поэтому раскладка не важна.
-    this.keys = this.input.keyboard.addKeys('W,A,D,SPACE,SHIFT,ESC');
+    this.keys = this.input.keyboard.addKeys('W,A,D,SPACE,SHIFT,ESC,F');
 
-    this.touch = { left: false, right: false, boost: false, jumpQueued: false };
+    this.touch = { left: false, right: false, boost: false, jumpQueued: false, jumpHeld: false, fireQueued: false };
 
     // Несколько пальцев одновременно: идти и прыгать надо уметь вместе.
     this.input.addPointer(3);
@@ -579,7 +599,20 @@ export class GameScene extends Phaser.Scene {
 
     mkPad(110, GAME_HEIGHT - 100, 62, '◀', () => (this.touch.left = true), () => (this.touch.left = false));
     mkPad(255, GAME_HEIGHT - 100, 62, '▶', () => (this.touch.right = true), () => (this.touch.right = false));
-    mkPad(GAME_WIDTH - 110, GAME_HEIGHT - 100, 70, '▲', () => (this.touch.jumpQueued = true));
+    mkPad(
+      GAME_WIDTH - 110,
+      GAME_HEIGHT - 100,
+      70,
+      '▲',
+      () => {
+        this.touch.jumpQueued = true;
+        this.touch.jumpHeld = true; // удержание нужно плащу
+      },
+      () => (this.touch.jumpHeld = false)
+    );
+    if (hasItem('slingshot')) {
+      mkPad(GAME_WIDTH - 250, GAME_HEIGHT - 210, 48, '•', () => (this.touch.fireQueued = true));
+    }
     if (hasItem('speedBoost')) {
       mkPad(
         GAME_WIDTH - 250,
@@ -701,7 +734,86 @@ export class GameScene extends Phaser.Scene {
       this.puff(this.player.x, this.player.y + 20, 0x9fd8ff);
     }
 
+    this.handleCloak(time, onFloor);
+    this.handleSlingshot(time);
     this.boosting = boosting;
+  }
+
+  /** Кнопка прыжка зажата — держим ли мы её сейчас (для плаща). */
+  isJumpHeld() {
+    const k = this.keys;
+    return this.cursors.up.isDown || k.W.isDown || k.SPACE.isDown || this.touch.jumpHeld;
+  }
+
+  /**
+   * Плащ (ТЗ): пока кнопка прыжка зажата в падении, капибара планирует.
+   * Отпустил — плащ сразу складывается, снова раскрыть можно только после
+   * нового прыжка и перезарядки.
+   */
+  handleCloak(time, onFloor) {
+    if (!hasItem('cloak')) return;
+
+    const held = this.isJumpHeld();
+    const falling = !onFloor && this.player.body.velocity.y > 0;
+
+    if (!this.cloakActive) {
+      // Раскрываем только в падении и только по свежему удержанию кнопки:
+      // иначе плащ распахивался бы сам, если игрок просто не отпустил прыжок.
+      if (held && falling && time >= this.cloakReadyAt && this.jumpReleasedInAir) {
+        this.cloakActive = true;
+        this.cloakUntil = time + this.cloak.duration;
+        this.cloakReadyAt = time + this.cloak.cooldown;
+        this.chute.setVisible(true).setScale(0.2);
+        this.tweens.add({ targets: this.chute, scale: 1, duration: 220, ease: 'Back.Out' });
+        sfx.jump();
+      }
+      if (!held && !onFloor) this.jumpReleasedInAir = true;
+      if (onFloor) this.jumpReleasedInAir = false;
+      return;
+    }
+
+    // Плащ раскрыт: держим скорость падения, пока не отпустили и не вышло время
+    if (!held || onFloor || time >= this.cloakUntil) {
+      this.cloakActive = false;
+      this.chute.setVisible(false);
+      return;
+    }
+    if (this.player.body.velocity.y > this.cloak.fallSpeed) {
+      this.player.setVelocityY(this.cloak.fallSpeed);
+    }
+  }
+
+  /**
+   * Рогатка (ТЗ): стреляет монеткой, монетка обезвреживает любого монстра,
+   * каждая атака отнимает монетку из кошелька.
+   */
+  handleSlingshot(time) {
+    if (!hasItem('slingshot')) return;
+
+    const fire = Phaser.Input.Keyboard.JustDown(this.keys.F) || this.touch.fireQueued;
+    this.touch.fireQueued = false;
+    if (!fire || time < this.slingReadyAt) return;
+
+    if (getSave().coins < this.sling.coinCost) {
+      this.floatLabel(this.player.x, this.player.y - 40, t('noCoins'));
+      return;
+    }
+
+    addCoins(-this.sling.coinCost);
+    this.slingReadyAt = time + this.sling.cooldown;
+
+    const pebble = this.pebbles.create(this.player.x + this.facing * 34, this.player.y - 20, 'pebble');
+    pebble.setDepth(4);
+    pebble.body.setCircle(9, 3, 3);
+    // Своя гравитация: на первом уровне монетка падает по дуге, на последнем
+    // летит почти прямо. Мировую гравитацию вычитаем, она тут ни при чём.
+    pebble.body.setGravityY(this.sling.gravity - PHYS.gravity);
+    pebble.setVelocityX(this.facing * this.sling.speed);
+    pebble.setVelocityY(this.sling.liftOff);
+    sfx.pop();
+
+    // Монетка живёт полторы секунды — дальше она всё равно уже вне экрана.
+    this.time.delayedCall(1500, () => pebble.active && pebble.destroy());
   }
 
   updateWalkers() {
@@ -746,6 +858,7 @@ export class GameScene extends Phaser.Scene {
 
   updateCapyVisual(time, onFloor) {
     this.capy.setPosition(this.player.x, this.player.y - 2);
+    if (this.chute.visible) this.chute.setPosition(this.player.x, this.player.y - 48);
 
     const vx = Math.abs(this.player.body.velocity.x);
     const state = !onFloor ? 'air' : vx > 30 ? 'walk' : 'idle';
@@ -762,8 +875,13 @@ export class GameScene extends Phaser.Scene {
 
   updateAbilityIcons(time) {
     this.abilityIcons.forEach((a) => {
-      const readyAt = a.id === 'doubleJump' ? this.doubleJumpReadyAt : this.boostReadyAt;
-      const cd = a.id === 'doubleJump' ? this.doubleJump.cooldown : this.boost.cooldown;
+      const readyAt = {
+        doubleJump: this.doubleJumpReadyAt,
+        speedBoost: this.boostReadyAt,
+        cloak: this.cloakReadyAt,
+        slingshot: this.slingReadyAt,
+      }[a.id];
+      const cd = this[a.id === 'speedBoost' ? 'boost' : a.id === 'slingshot' ? 'sling' : a.id].cooldown;
       const left = Math.max(0, readyAt - time);
       a.cooldown.clear();
       if (left <= 0) {
@@ -819,21 +937,35 @@ export class GameScene extends Phaser.Scene {
       this.player.body.velocity.y > 60 && this.player.body.bottom < enemy.body.top + 26;
 
     if (fallingOnto) {
-      enemy.disableBody(true, true);
       this.player.setVelocityY(PHYS.bounceOnEnemy);
-      this.monstersDown += 1;
-      this.monsterXp += XP.monster.easy;
-      // Опыт за монстра начисляем сразу: если игрок потом потеряет все жизни,
-      // старания всё равно зачтутся.
-      addXp(XP.monster.easy);
-      this.checkLevelUp();
-      sfx.pop();
-      this.puff(enemy.x, enemy.y, 0x8ed081);
-      this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy}`);
+      this.neutralize(enemy);
       return;
     }
 
     this.hurt(time);
+  }
+
+  /** Монетка из рогатки долетела до монстра. */
+  pebbleHit(pebble, enemy) {
+    if (!pebble.active || !enemy.active) return;
+    pebble.destroy();
+    this.neutralize(enemy);
+  }
+
+  /**
+   * Монстрик обезврежен — неважно, прыжком сверху или монеткой из рогатки.
+   * Опыт начисляем сразу: если игрок потом потеряет все жизни, старания
+   * всё равно зачтутся.
+   */
+  neutralize(enemy) {
+    enemy.disableBody(true, true);
+    this.monstersDown += 1;
+    this.monsterXp += XP.monster.easy;
+    addXp(XP.monster.easy);
+    this.checkLevelUp();
+    sfx.pop();
+    this.puff(enemy.x, enemy.y, 0x8ed081);
+    this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy}`);
   }
 
   /**

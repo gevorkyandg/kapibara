@@ -48,8 +48,26 @@ export const SHOP_ITEMS = [
     descKey: 'doubleJumpDesc',
     cooldown: ABILITIES.doubleJump.cooldown,
   },
-  // Дальше по ТЗ идут плащ (уровень 10) и рогатка (уровень 12). Они появятся
-  // здесь, когда будут сделаны сами способности — продавать неработающее нельзя.
+  {
+    id: 'cloak',
+    kind: 'ability',
+    minLevel: 10,
+    price: price(3),
+    icon: 'icon-cloak',
+    nameKey: 'cloakName',
+    descKey: 'cloakDesc',
+    cooldown: ABILITIES.cloak.cooldown,
+  },
+  {
+    id: 'slingshot',
+    kind: 'ability',
+    minLevel: 12,
+    price: price(4),
+    icon: 'icon-slingshot',
+    nameKey: 'slingshotName',
+    descKey: 'slingshotDesc',
+    cooldown: ABILITIES.slingshot.cooldown,
+  },
 ];
 
 /**

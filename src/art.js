@@ -353,6 +353,67 @@ export function createTextures(scene) {
   heart(36, 33, 1.5, 0xe0454f, 0x9c2b33);
   bake(g, 'icon-heart', 72, 72);
 
+  // Плащ: парашютик — понятнее всего читается как «медленное падение».
+  g.fillStyle(0xd8c8f0, 1);
+  g.lineStyle(4, 0x6a5b96, 1);
+  g.fillCircle(36, 36, 32);
+  g.strokeCircle(36, 36, 32);
+  g.fillStyle(0x8f7fd0, 1);
+  g.lineStyle(3, 0x4b3f77, 1);
+  g.beginPath();
+  g.arc(36, 40, 22, Math.PI, 0);
+  g.fillPath();
+  g.strokePath();
+  g.lineStyle(3, 0x4b3f77, 1);
+  g.lineBetween(16, 42, 30, 56);
+  g.lineBetween(36, 42, 36, 56);
+  g.lineBetween(56, 42, 42, 56);
+  g.fillStyle(0x4b3f77, 1);
+  g.fillRoundedRect(30, 54, 12, 8, 3);
+  bake(g, 'icon-cloak', 72, 72);
+
+  // Рогатка: рогулька с натянутой резинкой и монеткой
+  g.fillStyle(0xcfe8b0, 1);
+  g.lineStyle(4, 0x5f8a3f, 1);
+  g.fillCircle(36, 36, 32);
+  g.strokeCircle(36, 36, 32);
+  g.lineStyle(7, 0x8d6b4b, 1);
+  g.lineBetween(36, 60, 36, 40);
+  g.lineBetween(36, 40, 22, 20);
+  g.lineBetween(36, 40, 50, 20);
+  g.lineStyle(3, 0x5a3a22, 1);
+  g.lineBetween(22, 20, 34, 34);
+  g.lineBetween(50, 20, 38, 34);
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(3, 0xc9922a, 1);
+  g.fillCircle(36, 34, 8);
+  g.strokeCircle(36, 34, 8);
+  bake(g, 'icon-slingshot', 72, 72);
+
+  // Парашют плаща — висит над капибарой во время планирования
+  g.fillStyle(0x8f7fd0, 1);
+  g.lineStyle(4, 0x4b3f77, 1);
+  g.beginPath();
+  g.arc(34, 30, 30, Math.PI, 0);
+  g.fillPath();
+  g.strokePath();
+  g.fillStyle(0xb0a2e6, 1);
+  g.beginPath();
+  g.arc(34, 30, 12, Math.PI, 0);
+  g.fillPath();
+  g.lineStyle(3, 0x4b3f77, 1);
+  g.lineBetween(6, 31, 26, 50);
+  g.lineBetween(34, 31, 34, 50);
+  g.lineBetween(62, 31, 42, 50);
+  bake(g, 'chute', 68, 54);
+
+  // Летящая монетка рогатки — мельче обычной, чтобы не путать с добычей
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(3, 0xc9922a, 1);
+  g.fillCircle(12, 12, 9);
+  g.strokeCircle(12, 12, 9);
+  bake(g, 'pebble', 24, 24);
+
   g.fillStyle(0xffe08a, 1);
   g.lineStyle(4, 0xc9922a, 1);
   g.fillCircle(36, 36, 32);

@@ -74,8 +74,10 @@ export class ShopScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const cardW = 380;
-    const gap = 28;
+    // Карточек уже пять — ширина считается от их числа, иначе они не влезут.
+    const gap = 16;
+    const margin = 40;
+    const cardW = Math.min(380, (GAME_WIDTH - margin * 2 - (SHOP_ITEMS.length - 1) * gap) / SHOP_ITEMS.length);
     const totalW = SHOP_ITEMS.length * cardW + (SHOP_ITEMS.length - 1) * gap;
     const startX = (GAME_WIDTH - totalW) / 2 + cardW / 2;
 
@@ -92,12 +94,13 @@ export class ShopScene extends Phaser.Scene {
   buildCard(item, x, y, cardW) {
     panel(this, x, y, cardW, 470);
 
-    this.add.image(x, y - 168, item.icon).setScale(0.8);
+    const scale = cardW / 380;
+    this.add.image(x, y - 168, item.icon).setScale(0.8 * scale);
 
     this.add
       .text(x, y - 96, t(item.nameKey), {
         fontFamily: FONT,
-        fontSize: '29px',
+        fontSize: `${Math.round(29 * scale)}px`,
         color: COLORS.ink,
         fontStyle: 'bold',
         align: 'center',
@@ -108,7 +111,7 @@ export class ShopScene extends Phaser.Scene {
     this.add
       .text(x, y - 44, t(item.descKey), {
         fontFamily: FONT,
-        fontSize: '20px',
+        fontSize: `${Math.round(20 * scale)}px`,
         color: COLORS.inkDim,
         align: 'center',
         wordWrap: { width: cardW - 50 },
@@ -122,7 +125,7 @@ export class ShopScene extends Phaser.Scene {
     const state = this.add
       .text(x, y + 40, '', {
         fontFamily: FONT,
-        fontSize: '20px',
+        fontSize: `${Math.round(19 * scale)}px`,
         color: COLORS.ink,
         align: 'center',
         lineSpacing: 4,
@@ -130,8 +133,9 @@ export class ShopScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const price = coinBadge(this, x - 40, y + 140, item.price, 30);
-    const btn = makeButton(this, x, y + 190, 260, 62, '', () => this.onCardButton(item), {
+    const price = coinBadge(this, x - 34, y + 140, item.price, 28 * scale);
+    const btn = makeButton(this, x, y + 190, cardW - 40, 58, '', () => this.onCardButton(item), {
+      fontSize: Math.round(28 * scale),
       fill: COLORS.green,
       edge: COLORS.greenEdge,
     });
@@ -241,13 +245,13 @@ export class ShopScene extends Phaser.Scene {
   drawPips(g, x, y, total, filled) {
     g.clear();
     if (!total) return;
-    const step = 26;
+    const step = 22;
     const startX = x - ((total - 1) * step) / 2;
     for (let i = 0; i < total; i++) {
       g.fillStyle(i < filled ? 0x7bc36a : 0xe2d6c0, 1);
-      g.fillCircle(startX + i * step, y, 8);
+      g.fillCircle(startX + i * step, y, 7);
       g.lineStyle(3, i < filled ? 0x4f9c45 : 0xc9b99c, 1);
-      g.strokeCircle(startX + i * step, y, 8);
+      g.strokeCircle(startX + i * step, y, 7);
     }
   }
 }

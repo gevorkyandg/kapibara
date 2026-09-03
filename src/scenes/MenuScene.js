@@ -10,7 +10,7 @@ import {
   getMaxLives,
   hasItem,
   countPassedStages,
-  resetStats,
+  resetProgress,
   isSoundOn,
   setSound,
   flush,
@@ -190,7 +190,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Сброс статистики — пока инструмент для тестирования (DEBUG в config.js).
     if (DEBUG.statsReset) {
-      makeButton(this, x, y + 190, 240, 56, t('statsReset'), () => this.askResetStats(), {
+      makeButton(this, x, y + 190, 300, 56, t('resetAll'), () => this.askResetStats(), {
         fill: COLORS.panel,
         edge: COLORS.panelEdge,
         fontSize: 24,
@@ -227,7 +227,7 @@ export class MenuScene extends Phaser.Scene {
     );
   }
 
-  /** Сброс статистики только с подтверждением — требование ТЗ. */
+  /** Полный сброс прогресса — только с подтверждением. */
   askResetStats() {
     if (this.confirmBox) return;
 
@@ -236,7 +236,7 @@ export class MenuScene extends Phaser.Scene {
     box.add(panel(this, GAME_WIDTH / 2, GAME_HEIGHT / 2, 620, 300));
     box.add(
       this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, t('statsResetAsk'), {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, t('resetAllAsk'), {
           fontFamily: FONT,
           fontSize: '36px',
           color: COLORS.ink,
@@ -246,7 +246,7 @@ export class MenuScene extends Phaser.Scene {
     );
     box.add(
       this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 24, t('statsResetNote'), {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 24, t('resetAllNote'), {
           fontFamily: FONT,
           fontSize: '22px',
           color: COLORS.inkDim,
@@ -261,7 +261,7 @@ export class MenuScene extends Phaser.Scene {
 
     box.add(
       makeButton(this, GAME_WIDTH / 2 - 130, GAME_HEIGHT / 2 + 70, 220, 70, t('yes'), () => {
-        resetStats();
+        resetProgress();
         sfx.click();
         close();
         this.scene.restart();
