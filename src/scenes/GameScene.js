@@ -322,11 +322,11 @@ export class GameScene extends Phaser.Scene {
 
     // Общий кошелёк рядом со счётчиком этапа: слева собрано на этапе,
     // справа — сколько монеток всего. Рогатка тратит именно их.
-    fixed(panel(this, 420, 46, 240, 62, COLORS.panel, COLORS.panelEdge));
-    this.walletBadge = fixed(coinBadge(this, 322, 46, String(getSave().coins), 34));
+    fixed(panel(this, 530, 46, 210, 62, COLORS.panel, COLORS.panelEdge));
+    this.walletBadge = fixed(coinBadge(this, 448, 46, String(getSave().coins), 34));
 
     // Таймер этапа — по ТЗ он идёт с начала и замирает на паузе.
-    const timerX = GAME_WIDTH / 2 + 180;
+    const timerX = 750;
     fixed(panel(this, timerX, 44, 190, 58, COLORS.panel, COLORS.panelEdge));
     this.timerText = fixed(
       this.add
@@ -581,6 +581,14 @@ export class GameScene extends Phaser.Scene {
 
     this.touch = { left: false, right: false, boost: false, jumpQueued: false, jumpHeld: false, fireQueued: false };
 
+    // Esc открывает и закрывает паузу. Обработчик события, а не опрос в
+    // update(): на паузе update() не работает, и опрос бы не сработал —
+    // выглядело бы как зависшая игра.
+    this.input.keyboard.on('keydown-ESC', () => {
+      if (this.finished) return;
+      this.setPaused(!this.isPaused);
+    });
+
     // Несколько пальцев одновременно: идти и прыгать надо уметь вместе.
     this.input.addPointer(3);
 
@@ -697,8 +705,6 @@ export class GameScene extends Phaser.Scene {
       this.jumpBufferedAt = time;
       this.touch.jumpQueued = false;
     }
-
-    if (Phaser.Input.Keyboard.JustDown(k.ESC)) this.setPaused(true);
 
     // Ускорение
     const boostPressed = k.SHIFT.isDown || this.touch.boost;

@@ -166,6 +166,13 @@ export function getAbility(id) {
   const up = base.upgrades || {};
   const floor = up.minCooldown ?? MIN_COOLDOWN;
 
+  // Рогатка: с каждым улучшением монетка летит быстрее и ровнее. Подброс
+  // вверх обязан слабеть вместе с притяжением — иначе улучшенная монетка
+  // уходит в небо вместо того, чтобы лететь прямее.
+  const gravity =
+    base.gravity != null ? Math.max(0, base.gravity + level * (up.gravityStep || 0)) : 0;
+  const arc = base.gravity ? gravity / base.gravity : 0;
+
   return {
     level,
     maxLevel: up.max ?? 0,
@@ -174,11 +181,9 @@ export function getAbility(id) {
     multiplier: base.multiplier,
     fallSpeed: base.fallSpeed,
     coinCost: base.coinCost,
-    // Рогатка: с каждым улучшением монетка летит быстрее и ровнее, на
-    // последнем — почти без дуги.
     speed: base.speed ? base.speed + level * (up.speedStep || 0) : 0,
-    liftOff: base.liftOff || 0,
-    gravity: base.gravity != null ? Math.max(0, base.gravity + level * (up.gravityStep || 0)) : 0,
+    liftOff: (base.liftOff || 0) * arc,
+    gravity,
   };
 }
 

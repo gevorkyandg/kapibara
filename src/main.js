@@ -71,4 +71,10 @@ initPlatform().then(() => {
   window.addEventListener('focus', wakeUp);
   window.addEventListener('pageshow', wakeUp);
   document.addEventListener('visibilitychange', wakeUp);
+
+  // Страховка: любое касание или клавиша будят игру. Ввод Phaser обрабатывает
+  // внутри цикла — если цикл спит, нажатия просто копятся и кнопки кажутся
+  // мёртвыми. Эти слушатели висят на самой странице и до цикла не зависят.
+  document.addEventListener('pointerdown', wakeUp, true);
+  document.addEventListener('keydown', wakeUp, true);
 });
