@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { createBackground } from '../background.js';
-import { SHOP_ITEMS } from '../shop.js';
+import { SHOP_ITEMS, upgradePrice } from '../shop.js';
 import {
   getSave,
   getLevel,
   hasItem,
   buyItem,
+  buyUpgrade,
+  getUpgrade,
+  getAbility,
   buyExtraLife,
   getExtraLives,
   MAX_BOUGHT_LIVES,
@@ -15,11 +18,18 @@ import { t } from '../i18n.js';
 import { makeButton, panel, coinBadge, FONT, COLORS } from '../ui.js';
 import { sfx } from '../audio.js';
 
+/** Секунды с одним знаком после запятой: 2 сек, 2,7 сек. */
+function sec(ms) {
+  const value = Math.round(ms / 100) / 10;
+  return String(value).replace('.', ',');
+}
+
 /**
  * Магазин. Товары берутся из shop.js — новое улучшение добавляется туда одной
  * записью, сцену трогать не нужно.
  *
- * Доступ к товару по ТЗ двойной: нужен и уровень игрока, и монеты.
+ * Доступ к товару по ТЗ двойной: нужен и уровень игрока, и монеты. Купленную
+ * способность можно улучшать несколько раз, каждый раз дороже предыдущего.
  */
 export class ShopScene extends Phaser.Scene {
   constructor() {
@@ -30,9 +40,9 @@ export class ShopScene extends Phaser.Scene {
     createBackground(this, 1, GAME_WIDTH);
 
     this.add
-      .text(GAME_WIDTH / 2, 70, t('shop'), {
+      .text(GAME_WIDTH / 2, 62, t('shop'), {
         fontFamily: FONT,
-        fontSize: '54px',
+        fontSize: '50px',
         color: '#ffffff',
         fontStyle: 'bold',
         stroke: '#7a4a28',
@@ -54,7 +64,7 @@ export class ShopScene extends Phaser.Scene {
       .setOrigin(1, 0.5);
 
     this.message = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 128, '', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 122, '', {
         fontFamily: FONT,
         fontSize: '26px',
         color: '#ffffff',
@@ -69,70 +79,95 @@ export class ShopScene extends Phaser.Scene {
     const totalW = SHOP_ITEMS.length * cardW + (SHOP_ITEMS.length - 1) * gap;
     const startX = (GAME_WIDTH - totalW) / 2 + cardW / 2;
 
-    this.cards = SHOP_ITEMS.map((item, i) => {
-      const x = startX + i * (cardW + gap);
-      const y = GAME_HEIGHT / 2 - 10;
-      panel(this, x, y, cardW, 400);
-
-      this.add.image(x, y - 130, item.icon).setScale(0.85);
-
-      this.add
-        .text(x, y - 50, t(item.nameKey), {
-          fontFamily: FONT,
-          fontSize: '30px',
-          color: COLORS.ink,
-          fontStyle: 'bold',
-          align: 'center',
-          wordWrap: { width: cardW - 50 },
-        })
-        .setOrigin(0.5);
-
-      this.add
-        .text(x, y + 12, t(item.descKey), {
-          fontFamily: FONT,
-          fontSize: '21px',
-          color: COLORS.inkDim,
-          align: 'center',
-          wordWrap: { width: cardW - 50 },
-        })
-        .setOrigin(0.5);
-
-      const price = coinBadge(this, x - 40, y + 82, item.price, 30);
-
-      // Строка состояния: сколько куплено или какой уровень нужен.
-      const note = this.add
-        .text(x, y + 122, '', { fontFamily: FONT, fontSize: '20px', color: COLORS.inkDim })
-        .setOrigin(0.5);
-
-      const btn = makeButton(this, x, y + 165, 260, 62, '', () => this.tryBuy(item), {
-        fill: COLORS.green,
-        edge: COLORS.greenEdge,
-      });
-
-      return { item, btn, price, note };
-    });
+    this.cards = SHOP_ITEMS.map((item, i) => this.buildCard(item, startX + i * (cardW + gap), 372, cardW));
 
     this.refresh();
 
-    makeButton(this, 140, GAME_HEIGHT - 56, 200, 64, t('back'), () => this.scene.start('MenuScene'), {
+    makeButton(this, 140, GAME_HEIGHT - 52, 200, 62, t('back'), () => this.scene.start('MenuScene'), {
       fill: COLORS.panel,
       edge: COLORS.panelEdge,
     });
   }
 
-  tryBuy(item) {
+  buildCard(item, x, y, cardW) {
+    panel(this, x, y, cardW, 470);
+
+    this.add.image(x, y - 168, item.icon).setScale(0.8);
+
+    this.add
+      .text(x, y - 96, t(item.nameKey), {
+        fontFamily: FONT,
+        fontSize: '29px',
+        color: COLORS.ink,
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: cardW - 50 },
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(x, y - 44, t(item.descKey), {
+        fontFamily: FONT,
+        fontSize: '20px',
+        color: COLORS.inkDim,
+        align: 'center',
+        wordWrap: { width: cardW - 50 },
+      })
+      .setOrigin(0.5);
+
+    // Полоска купленных улучшений — сразу видно, сколько ещё можно взять.
+    const pips = this.add.graphics();
+
+    // Что даёт следующее улучшение и какие числа сейчас
+    const state = this.add
+      .text(x, y + 40, '', {
+        fontFamily: FONT,
+        fontSize: '20px',
+        color: COLORS.ink,
+        align: 'center',
+        lineSpacing: 4,
+        wordWrap: { width: cardW - 40 },
+      })
+      .setOrigin(0.5, 0);
+
+    const price = coinBadge(this, x - 40, y + 140, item.price, 30);
+    const btn = makeButton(this, x, y + 190, 260, 62, '', () => this.onCardButton(item), {
+      fill: COLORS.green,
+      edge: COLORS.greenEdge,
+    });
+
+    return { item, x, y, cardW, pips, state, price, btn };
+  }
+
+  /** Одна кнопка на карточке: сначала покупает, потом улучшает. */
+  onCardButton(item) {
     const level = getLevel();
     if (level < item.minLevel) {
       this.say(t('needLevel', { n: item.minLevel }));
       return;
     }
-    if (getSave().coins < item.price) {
-      this.say(t('notEnough'));
+
+    if (item.kind === 'life') {
+      this.pay(() => buyExtraLife(item.price), item.price);
       return;
     }
 
-    const bought = item.kind === 'life' ? buyExtraLife(item.price) : buyItem(item.id, item.price);
-    if (!bought) return;
+    if (!hasItem(item.id)) {
+      this.pay(() => buyItem(item.id, item.price), item.price);
+      return;
+    }
+
+    const next = upgradePrice(item, getUpgrade(item.id));
+    this.pay(() => buyUpgrade(item.id, next), next);
+  }
+
+  /** Общая часть покупки: проверить монеты, купить, обновить витрину. */
+  pay(action, price) {
+    if (getSave().coins < price) {
+      this.say(t('notEnough'));
+      return;
+    }
+    if (!action()) return;
 
     sfx.buy();
     this.message.setText('');
@@ -150,20 +185,69 @@ export class ShopScene extends Phaser.Scene {
     const level = getLevel();
     this.wallet.value.setText(String(getSave().coins));
 
-    this.cards.forEach(({ item, btn, price, note }) => {
-      const locked = level < item.minLevel;
-      const lives = getExtraLives();
-      const owned = item.kind === 'life' ? lives >= MAX_BOUGHT_LIVES : hasItem(item.id);
+    this.cards.forEach((card) => this.refreshCard(card, level));
+  }
 
-      if (item.kind === 'life') {
-        note.setText(locked ? t('needLevel', { n: item.minLevel }) : t('boughtOf', { n: lives, m: MAX_BOUGHT_LIVES }));
-      } else {
-        note.setText(locked ? t('needLevel', { n: item.minLevel }) : '');
-      }
+  refreshCard({ item, x, y, cardW, pips, state, price, btn }, level) {
+    const locked = level < item.minLevel;
 
-      btn.label.setText(owned ? t('bought') : t('buy'));
-      btn.setEnabled(!owned && !locked);
-      price.setAlpha(owned ? 0.35 : 1);
-    });
+    // Жизни — просто несколько одинаковых покупок
+    if (item.kind === 'life') {
+      const bought = getExtraLives();
+      const maxed = bought >= MAX_BOUGHT_LIVES;
+      this.drawPips(pips, x, y + 8, MAX_BOUGHT_LIVES, bought);
+      state.setText(
+        locked ? t('needLevel', { n: item.minLevel }) : t('boughtOf', { n: bought, m: MAX_BOUGHT_LIVES })
+      );
+      price.value.setText(String(item.price));
+      price.setAlpha(maxed ? 0.35 : 1);
+      btn.label.setText(maxed ? t('bought') : t('buy'));
+      btn.setEnabled(!maxed && !locked);
+      return;
+    }
+
+    const owned = hasItem(item.id);
+    const ability = getAbility(item.id);
+    const maxed = owned && ability.level >= ability.maxLevel;
+
+    this.drawPips(pips, x, y + 8, ability.maxLevel, ability.level);
+
+    const lines = [];
+    if (locked) {
+      lines.push(t('needLevel', { n: item.minLevel }));
+    } else if (!owned) {
+      lines.push(t('upgradesAvailable', { n: ability.maxLevel }));
+    } else {
+      // Текущие числа способности и что изменится после улучшения
+      lines.push(`${t('cooldown')}: ${sec(ability.cooldown)} ${t('secShort')}`);
+      if (ability.duration) lines.push(`${t('duration')}: ${sec(ability.duration)} ${t('secShort')}`);
+      lines.push(
+        maxed
+          ? t('fullyUpgraded')
+          : t('upgradeOf', { n: ability.level + 1, m: ability.maxLevel })
+      );
+    }
+    state.setText(lines.join('\n'));
+
+    const nextPrice = owned && !maxed ? upgradePrice(item, ability.level) : item.price;
+    price.value.setText(String(nextPrice));
+    price.setAlpha(maxed ? 0.35 : 1);
+
+    btn.label.setText(maxed ? t('bought') : owned ? t('upgrade') : t('buy'));
+    btn.setEnabled(!maxed && !locked);
+  }
+
+  /** Точки-деления: сколько улучшений уже куплено из возможных. */
+  drawPips(g, x, y, total, filled) {
+    g.clear();
+    if (!total) return;
+    const step = 26;
+    const startX = x - ((total - 1) * step) / 2;
+    for (let i = 0; i < total; i++) {
+      g.fillStyle(i < filled ? 0x7bc36a : 0xe2d6c0, 1);
+      g.fillCircle(startX + i * step, y, 8);
+      g.lineStyle(3, i < filled ? 0x4f9c45 : 0xc9b99c, 1);
+      g.strokeCircle(startX + i * step, y, 8);
+    }
   }
 }

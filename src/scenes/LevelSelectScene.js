@@ -39,8 +39,12 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5);
 
-    const cardW = 300;
-    const gap = 40;
+    // Карточки ужимаются под число этапов: их станет 25, и жёсткая ширина
+    // давно бы уехала за край экрана.
+    const gap = 30;
+    const margin = 90;
+    const cardW = Math.min(300, (GAME_WIDTH - margin * 2 - (LEVELS.length - 1) * gap) / LEVELS.length);
+    const scale = cardW / 300; // мельче карточка — мельче и всё внутри
     const totalW = LEVELS.length * cardW + (LEVELS.length - 1) * gap;
     const startX = (GAME_WIDTH - totalW) / 2 + cardW / 2;
 
@@ -55,7 +59,7 @@ export class LevelSelectScene extends Phaser.Scene {
       this.add
         .text(x, y - 132, `${t('stage')} ${i + 1}`, {
           fontFamily: FONT,
-          fontSize: '30px',
+          fontSize: `${Math.round(30 * scale)}px`,
           color: COLORS.inkDim,
           fontStyle: 'bold',
         })
@@ -64,7 +68,7 @@ export class LevelSelectScene extends Phaser.Scene {
       this.add
         .text(x, y - 88, getLanguage() === 'ru' ? level.name : level.nameEn, {
           fontFamily: FONT,
-          fontSize: '27px',
+          fontSize: `${Math.round(27 * scale)}px`,
           color: COLORS.ink,
           fontStyle: 'bold',
           align: 'center',
@@ -72,7 +76,7 @@ export class LevelSelectScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
 
-      starRow(this, x, y - 26, unlocked ? result.stars : 0, 0.6);
+      starRow(this, x, y - 26, unlocked ? result.stars : 0, 0.6 * scale);
 
       const lines = unlocked
         ? [
@@ -85,7 +89,7 @@ export class LevelSelectScene extends Phaser.Scene {
       this.add
         .text(x, y + 46, lines.join('\n'), {
           fontFamily: FONT,
-          fontSize: '21px',
+          fontSize: `${Math.round(21 * scale)}px`,
           color: COLORS.inkDim,
           align: 'center',
           lineSpacing: 4,
@@ -93,7 +97,7 @@ export class LevelSelectScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
 
-      const btn = makeButton(this, x, y + 128, 200, 64, unlocked ? t('play') : t('locked'), () =>
+      const btn = makeButton(this, x, y + 128, cardW - 60, 64, unlocked ? t('play') : t('locked'), () =>
         this.scene.start('GameScene', { levelIndex: i })
       );
       if (!unlocked) btn.setEnabled(false);

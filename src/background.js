@@ -10,7 +10,12 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from './config.js';
 import { THEMES } from './art.js';
 
-export function createBackground(scene, themeIndex, worldWidth) {
+/**
+ * @param {number} worldWidth ширина мира в пикселях
+ * @param {number} [worldHeight] высота мира; для высоких этапов она больше
+ *   экрана, и декорации привязываются к низу мира, а не к низу кадра
+ */
+export function createBackground(scene, themeIndex, worldWidth, worldHeight = GAME_HEIGHT) {
   const theme = THEMES[themeIndex];
 
   // Небо — градиент во весь кадр, оно не двигается вообще.
@@ -26,13 +31,19 @@ export function createBackground(scene, themeIndex, worldWidth) {
     .setScrollFactor(0)
     .setDepth(-99);
 
-  const layer = (key, count, scrollFactor, yFrom, yTo, scaleFrom, scaleTo, depth, alpha = 1) => {
+  /**
+   * @param {number} scrollX насколько слой отстаёт по горизонтали
+   * @param {number} scrollY по вертикали: у облаков он маленький (небо почти
+   *   не двигается), у холмов и деревьев — единица, иначе при подъёме на
+   *   высоком этапе они уползают за нижний край кадра
+   */
+  const layer = (key, count, scrollX, scrollY, yFrom, yTo, scaleFrom, scaleTo, depth, alpha = 1) => {
     // Видимая ширина слоя меньше мира во столько же раз, во сколько он медленнее.
-    const span = worldWidth * scrollFactor + GAME_WIDTH;
+    const span = worldWidth * scrollX + GAME_WIDTH;
     for (let i = 0; i < count; i++) {
       scene.add
         .image((i / count) * span + rnd.between(-60, 60), rnd.between(yFrom, yTo), key)
-        .setScrollFactor(scrollFactor)
+        .setScrollFactor(scrollX, scrollY)
         .setScale(rnd.realInRange(scaleFrom, scaleTo))
         .setAlpha(alpha)
         .setDepth(depth);
@@ -40,8 +51,10 @@ export function createBackground(scene, themeIndex, worldWidth) {
   };
 
   const chunks = Math.ceil(worldWidth / 720);
-  layer(`cloud-${themeIndex}`, chunks + 4, 0.15, 70, 240, 0.7, 1.3, -90, 0.95);
-  layer(`hill-far-${themeIndex}`, chunks + 2, 0.3, GAME_HEIGHT - 190, GAME_HEIGHT - 150, 0.9, 1.4, -85);
-  layer(`hill-near-${themeIndex}`, chunks + 3, 0.5, GAME_HEIGHT - 150, GAME_HEIGHT - 110, 0.8, 1.2, -80);
-  layer(`tree-${themeIndex}`, chunks + 2, 0.75, GAME_HEIGHT - 190, GAME_HEIGHT - 160, 0.7, 1.0, -70);
+  const ground = worldHeight; // низ мира, а не низ экрана
+
+  layer(`cloud-${themeIndex}`, chunks + 4, 0.15, 0.15, 70, 240, 0.7, 1.3, -90, 0.95);
+  layer(`hill-far-${themeIndex}`, chunks + 2, 0.3, 1, ground - 190, ground - 150, 0.9, 1.4, -85);
+  layer(`hill-near-${themeIndex}`, chunks + 3, 0.5, 1, ground - 150, ground - 110, 0.8, 1.2, -80);
+  layer(`tree-${themeIndex}`, chunks + 2, 0.75, 1, ground - 190, ground - 160, 0.7, 1.0, -70);
 }

@@ -10,6 +10,7 @@
 
 import { platform } from './platform/index.js';
 import { XP, levelFromXp, levelBonuses, MAX_LEVEL } from './progression.js';
+import { ABILITIES, MIN_COOLDOWN } from './config.js';
 
 const SAVE_INTERVAL = 3000;
 
@@ -21,6 +22,7 @@ const DEFAULT_SAVE = {
   coins: 0,
   xp: 0,
   items: { doubleJump: false, speedBoost: false, cloak: false, slingshot: false },
+  upgrades: { doubleJump: 0, speedBoost: 0, slingshot: 0 }, // сколько раз улучшено
   extraLives: 0, // купленные жизни, 0..MAX_BOUGHT_LIVES
   levels: {}, // { "0": { stars: 0..3, best: 0..1, bestTime: мс } }
   stats: { playMs: 0, coins: 0, treats: 0, monsters: 0, stages: 0 },
@@ -43,6 +45,7 @@ export async function loadSave() {
       ...structuredClone(DEFAULT_SAVE),
       ...raw,
       items: { ...DEFAULT_SAVE.items, ...(raw.items || {}) },
+      upgrades: { ...DEFAULT_SAVE.upgrades, ...(raw.upgrades || {}) },
       levels: { ...(raw.levels || {}) },
       stats: { ...DEFAULT_SAVE.stats, ...(raw.stats || {}) },
     };
@@ -132,6 +135,42 @@ export function buyItem(id, price) {
   markDirty();
   flush();
   return true;
+}
+
+/** Сколько раз способность уже улучшена. */
+export function getUpgrade(id) {
+  return data.upgrades?.[id] || 0;
+}
+
+/**
+ * Купить следующее улучшение способности.
+ * @returns {boolean} удалось ли
+ */
+export function buyUpgrade(id, price) {
+  const max = ABILITIES[id]?.upgrades?.max ?? 0;
+  if (!hasItem(id) || getUpgrade(id) >= max || data.coins < price) return false;
+  data.coins -= price;
+  data.upgrades[id] = getUpgrade(id) + 1;
+  markDirty();
+  flush();
+  return true;
+}
+
+/**
+ * Итоговые числа способности с учётом купленных улучшений — игра берёт
+ * их отсюда, а не из констант, иначе прокачка ни на что не влияла бы.
+ */
+export function getAbility(id) {
+  const base = ABILITIES[id];
+  const level = getUpgrade(id);
+  const up = base.upgrades || {};
+  return {
+    level,
+    maxLevel: up.max ?? 0,
+    cooldown: Math.max(MIN_COOLDOWN, base.cooldown - level * (up.cooldownStep || 0)),
+    duration: base.duration ? base.duration + level * (up.durationStep || 0) : 0,
+    multiplier: base.multiplier,
+  };
 }
 
 export function getExtraLives() {

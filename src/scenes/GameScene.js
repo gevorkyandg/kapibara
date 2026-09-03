@@ -3,9 +3,7 @@ import {
   GAME_WIDTH,
   GAME_HEIGHT,
   TILE,
-  ROWS,
   PHYS,
-  ABILITIES,
   TREAT_CHANCE,
   LIVES,
 } from '../config.js';
@@ -22,6 +20,7 @@ import {
   getBonuses,
   getMaxLives,
   getLevel,
+  getAbility,
   flush,
 } from '../save.js';
 import {
@@ -57,8 +56,9 @@ export class GameScene extends Phaser.Scene {
 
     this.map = buildLevelMap(this.levelIndex);
     this.cols = this.map[0].length;
+    this.rows = this.map.length;
     this.worldW = this.cols * TILE;
-    this.worldH = ROWS * TILE;
+    this.worldH = this.rows * TILE;
 
     this.totalCoins = countCoins(this.levelIndex);
     this.coinsCollected = 0;
@@ -82,6 +82,10 @@ export class GameScene extends Phaser.Scene {
     this.walkSpeed = PHYS.walkSpeed + bonus.speed;
     this.jumpVelocity = PHYS.jumpVelocity - bonus.jump; // скорость прыжка отрицательная
 
+    // Числа способностей — с учётом улучшений из магазина.
+    this.boost = getAbility('speedBoost');
+    this.doubleJump = getAbility('doubleJump');
+
     // Состояние умений. Время везде — игровое (мс от старта сцены).
     this.airJumpUsed = false;
     this.doubleJumpReadyAt = 0;
@@ -98,7 +102,7 @@ export class GameScene extends Phaser.Scene {
     // упереться в невидимый пол.
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH + 600);
 
-    createBackground(this, this.themeIndex, this.worldW);
+    createBackground(this, this.themeIndex, this.worldW, this.worldH);
     this.buildLevel();
     this.createPlayer();
     this.createColliders();
@@ -107,6 +111,9 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, this.worldW, this.worldH);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.16, -120, 40);
+    // Мёртвая зона: пока капибара прыгает в её пределах, камера стоит.
+    // Без этого на высоком этапе кадр дёргался бы от каждого прыжка.
+    this.cameras.main.setDeadzone(200, 240);
     this.cameras.main.fadeIn(250);
 
     platform.gameplayStart();
@@ -132,7 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.flyers = this.physics.add.group({ allowGravity: false, immovable: true });
     this.hazards = []; // прямоугольники шипов: проверяем их вручную, так проще
 
-    for (let row = 0; row < ROWS; row++) {
+    for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
         const ch = this.map[row][col];
         if (ch === ' ') continue;
@@ -647,14 +654,15 @@ export class GameScene extends Phaser.Scene {
       time >= this.boostReadyAt &&
       time >= this.boostUntil
     ) {
-      this.boostUntil = time + ABILITIES.speedBoost.duration;
-      // Перезарядка считается от момента включения: 2 с работает, ещё 4 с ждём.
-      this.boostReadyAt = time + ABILITIES.speedBoost.cooldown;
+      this.boostUntil = time + this.boost.duration;
+      // Перезарядка считается от момента включения: пока действует ускорение,
+      // она уже идёт.
+      this.boostReadyAt = time + this.boost.cooldown;
       sfx.boost();
       this.puff(this.player.x, this.player.y + 20, 0xffe08a);
     }
     const boosting = time < this.boostUntil;
-    const speed = this.walkSpeed * (boosting ? ABILITIES.speedBoost.multiplier : 1);
+    const speed = this.walkSpeed * (boosting ? this.boost.multiplier : 1);
 
     if (left && !right) {
       this.player.setVelocityX(-speed);
@@ -687,7 +695,7 @@ export class GameScene extends Phaser.Scene {
     ) {
       this.player.setVelocityY(this.jumpVelocity * 0.92);
       this.airJumpUsed = true;
-      this.doubleJumpReadyAt = time + ABILITIES.doubleJump.cooldown;
+      this.doubleJumpReadyAt = time + this.doubleJump.cooldown;
       this.jumpBufferedAt = -9999;
       sfx.doubleJump();
       this.puff(this.player.x, this.player.y + 20, 0x9fd8ff);
@@ -717,7 +725,7 @@ export class GameScene extends Phaser.Scene {
   isSolidAtPixel(x, y) {
     const col = Math.floor(x / TILE);
     const row = Math.floor(y / TILE);
-    if (col < 0 || col >= this.cols || row < 0 || row >= ROWS) return false;
+    if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return false;
     const ch = this.map[row][col];
     if (ch === '#') return true;
     // Платформа — только верхние 26 px своей клетки.
@@ -755,7 +763,7 @@ export class GameScene extends Phaser.Scene {
   updateAbilityIcons(time) {
     this.abilityIcons.forEach((a) => {
       const readyAt = a.id === 'doubleJump' ? this.doubleJumpReadyAt : this.boostReadyAt;
-      const cd = ABILITIES[a.id].cooldown;
+      const cd = a.id === 'doubleJump' ? this.doubleJump.cooldown : this.boost.cooldown;
       const left = Math.max(0, readyAt - time);
       a.cooldown.clear();
       if (left <= 0) {
