@@ -146,6 +146,10 @@ export class GameScene extends Phaser.Scene {
     this.flyers = this.physics.add.group({ allowGravity: false, immovable: true });
     this.hazards = []; // прямоугольники шипов: проверяем их вручную, так проще
     this.pebbles = this.physics.add.group(); // монетки из рогатки
+    this.springs = this.physics.add.staticGroup(); // пружины
+    this.cloudlets = this.physics.add.staticGroup(); // облачка
+    this.fallers = this.physics.add.staticGroup(); // падающие платформы
+    this.movers = this.physics.add.group(); // движущиеся платформы
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
@@ -201,6 +205,79 @@ export class GameScene extends Phaser.Scene {
               repeat: -1,
               ease: 'Sine.easeInOut',
             });
+            break;
+          }
+
+          case '~': {
+            // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).
+            const fire = this.add.image(cx, top + TILE - 28, 'campfire').setDepth(2);
+            this.tweens.add({
+              targets: fire,
+              scaleY: 1.12,
+              scaleX: 0.94,
+              duration: 420,
+              yoyo: true,
+              repeat: -1,
+              ease: 'Sine.easeInOut',
+            });
+            this.hazards.push(new Phaser.Geom.Rectangle(cx - 24, top + TILE - 46, 48, 46));
+            break;
+          }
+
+          case 's': {
+            // Пружина: подбрасывает вдвое выше обычного прыжка.
+            const spring = this.springs.create(cx, top + TILE - 28, 'spring');
+            spring.setDepth(2);
+            spring.body.setSize(50, 30).setOffset(5, 12);
+            break;
+          }
+
+          case 'c': {
+            // Облачко: даёт +20% к прыжку и сразу лопается.
+            const cloudlet = this.cloudlets.create(cx, top + 26, 'cloudlet');
+            cloudlet.setDepth(2).setScale(0.8);
+            cloudlet.body.setSize(64, 26).setOffset(6, 10);
+            this.tweens.add({
+              targets: cloudlet,
+              y: cloudlet.y - 8,
+              duration: 1400,
+              yoyo: true,
+              repeat: -1,
+              ease: 'Sine.easeInOut',
+            });
+            break;
+          }
+
+          case 'x': {
+            // Падающая платформа: подрожит и рухнет.
+            const weak = this.fallers.create(cx, top + 13, `platform-crack-${th}`);
+            weak.setDepth(2);
+            weak.startY = weak.y;
+            break;
+          }
+
+          case '-':
+          case '|': {
+            // Движущаяся платформа. Двигаем её скоростью, а не твином: твин
+            // меняет картинку, а физическое тело возвращает её обратно, и
+            // платформа стоит на месте.
+            const mover = this.movers.create(cx, top + 13, `platform-move-${th}`);
+            mover.setDepth(2);
+            mover.body.setAllowGravity(false);
+            mover.body.setImmovable(true);
+
+            mover.axis = ch === '-' ? 'x' : 'y';
+            mover.speed = ch === '-' ? 80 : 60;
+            const range = ch === '-' ? 170 : 130;
+            if (mover.axis === 'x') {
+              mover.min = cx;
+              mover.max = cx + range;
+              mover.setVelocityX(mover.speed);
+            } else {
+              mover.min = top + 13;
+              mover.max = top + 13 + range;
+              mover.setVelocityY(mover.speed);
+            }
             break;
           }
 
@@ -297,6 +374,17 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
+    // Платформы, по которым можно ходить
+    this.physics.add.collider(this.player, this.movers);
+    this.physics.add.collider(this.player, this.fallers, (_p, weak) => this.touchFaller(weak));
+    this.physics.add.collider(this.walkers, this.movers);
+
+    // Подкидывающие: срабатывают, когда капибара падает на них сверху
+    this.physics.add.overlap(this.player, this.springs, (_p, spring) => this.bounce(spring, 2));
+    this.physics.add.overlap(this.player, this.cloudlets, (_p, cloud) =>
+      this.bounce(cloud, 1.2, true)
+    );
+
     this.physics.add.collider(this.pebbles, this.solids, (pebble) => pebble.destroy());
     this.physics.add.overlap(this.pebbles, this.walkers, (pebble, e) => this.pebbleHit(pebble, e));
     this.physics.add.overlap(this.pebbles, this.flyers, (pebble, e) => this.pebbleHit(pebble, e));
@@ -665,6 +753,7 @@ export class GameScene extends Phaser.Scene {
 
     this.handleMovement(time, onFloor);
     this.updateWalkers();
+    this.rideMovers();
     this.updateHazards();
     this.updateCapyVisual(time, onFloor);
     if (this.auraRings?.length) {
@@ -998,6 +1087,102 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.hurt(time);
+  }
+
+  /**
+   * Пружина и облачко подкидывают капибару вверх. Срабатывают только сверху:
+   * задел сбоку — просто прошёл мимо.
+   *
+   * @param {number} heightMul во сколько раз выше обычного прыжка подкинуть
+   * @param {boolean} popped лопается ли после касания (облачко — да)
+   */
+  bounce(thing, heightMul, popped = false) {
+    if (!thing.active || this.finished) return;
+    const body = this.player.body;
+    if (body.velocity.y < 0 || body.bottom > thing.body.top + 30) return;
+
+    // Высота растёт как квадрат скорости, поэтому «вдвое выше» — это не
+    // двойная скорость, а корень из двух. Иначе пружина забрасывала бы
+    // капибару вчетверо выше, чем задумано.
+    this.player.setVelocityY(this.jumpVelocity * Math.sqrt(heightMul));
+    this.airJumpUsed = false; // после подкидывания двойной прыжок снова доступен
+    sfx.jump();
+
+    if (popped) {
+      // Облачко лопается сразу после касания (ТЗ).
+      thing.disableBody(true, false);
+      this.puff(thing.x, thing.y, 0xffffff);
+      this.tweens.add({
+        targets: thing,
+        scale: 1.3,
+        alpha: 0,
+        duration: 220,
+        onComplete: () => thing.destroy(),
+      });
+      return;
+    }
+
+    // Пружина сжимается и распрямляется
+    this.tweens.add({ targets: thing, scaleY: 0.6, duration: 90, yoyo: true });
+  }
+
+  /**
+   * Наступили на треснувшую платформу: она дрожит и через мгновение падает.
+   * Восстанавливается при перезапуске этапа.
+   */
+  touchFaller(weak) {
+    if (weak.falling || !weak.active) return;
+    if (this.player.body.bottom > weak.body.top + 20) return; // задели снизу
+    weak.falling = true;
+
+    this.tweens.add({
+      targets: weak,
+      x: weak.x + 3,
+      duration: 55,
+      yoyo: true,
+      repeat: 8,
+      onComplete: () => {
+        weak.body.enable = false;
+        this.tweens.add({
+          targets: weak,
+          y: weak.y + 400,
+          alpha: 0,
+          duration: 700,
+          onComplete: () => weak.destroy(),
+        });
+      },
+    });
+  }
+
+  /**
+   * Капибара едет вместе с движущейся платформой. Arcade сам этого не делает:
+   * платформа уезжает из-под ног, и герой остаётся висеть на месте.
+   */
+  rideMovers() {
+    this.movers.children.iterate((m) => {
+      if (!m || !m.active) return;
+
+      // Разворот на краях своего отрезка
+      if (m.axis === 'x') {
+        if (m.x >= m.max) m.setVelocityX(-m.speed);
+        else if (m.x <= m.min) m.setVelocityX(m.speed);
+      } else {
+        if (m.y >= m.max) m.setVelocityY(-m.speed);
+        else if (m.y <= m.min) m.setVelocityY(m.speed);
+      }
+
+      // Капибара стоит сверху — переносим её вместе с платформой
+      const body = this.player.body;
+      const стоитСверху =
+        Math.abs(body.bottom - m.body.top) < 8 &&
+        body.right > m.body.left + 4 &&
+        body.left < m.body.right - 4;
+
+      if (стоитСверху) {
+        this.player.x += m.body.deltaX();
+        this.player.y += m.body.deltaY();
+      }
+    });
   }
 
   /** Монетка из рогатки долетела до монстра. */

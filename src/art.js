@@ -264,6 +264,61 @@ export function createTextures(scene) {
   }
   bake(g, 'spike', 60, 38);
 
+  // Костёр: как колючки, трогать нельзя ни с какой стороны (ТЗ)
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(6, 40, 48, 12, 6);
+  g.strokeRoundedRect(6, 40, 48, 12, 6);
+  g.fillRoundedRect(14, 30, 32, 11, 5);
+  g.strokeRoundedRect(14, 30, 32, 11, 5);
+  const flame = (cx, cy, w, h, color) => {
+    g.fillStyle(color, 1);
+    g.fillPoints(
+      [
+        { x: cx, y: cy - h },
+        { x: cx + w / 2, y: cy },
+        { x: cx, y: cy + h / 3 },
+        { x: cx - w / 2, y: cy },
+      ],
+      true
+    );
+  };
+  flame(30, 26, 34, 26, 0xe8760f);
+  flame(30, 24, 20, 18, 0xffc247);
+  flame(30, 22, 10, 10, 0xfff3b0);
+  bake(g, 'campfire', 60, 56);
+
+  // Пружина: сжатая спираль на подставке, даёт двойной прыжок вверх
+  g.fillStyle(0x9aa7b4, 1);
+  g.lineStyle(4, 0x5f6b78, 1);
+  g.fillRoundedRect(6, 40, 48, 12, 5);
+  g.strokeRoundedRect(6, 40, 48, 12, 5);
+  g.lineStyle(6, 0xd8dee6, 1);
+  g.beginPath();
+  g.moveTo(14, 38);
+  for (let i = 0; i < 3; i++) {
+    g.lineTo(46, 32 - i * 8);
+    g.lineTo(14, 26 - i * 8);
+  }
+  g.strokePath();
+  g.fillStyle(0xff8fa3, 1);
+  g.lineStyle(4, 0xc2506a, 1);
+  g.fillRoundedRect(8, 2, 44, 12, 6);
+  g.strokeRoundedRect(8, 2, 44, 12, 6);
+  bake(g, 'spring', 60, 56);
+
+  // Облачко: мягкая ступенька, которая лопается после касания
+  g.fillStyle(0xffffff, 1);
+  g.lineStyle(4, 0xb9cddd, 1);
+  g.fillCircle(20, 24, 16);
+  g.fillCircle(40, 22, 18);
+  g.fillCircle(58, 26, 14);
+  g.fillRect(20, 24, 38, 16);
+  g.strokeCircle(20, 24, 16);
+  g.strokeCircle(40, 22, 18);
+  g.strokeCircle(58, 26, 14);
+  bake(g, 'cloudlet', 76, 46);
+
   // Флаг финиша
   const flagCloth = [
     { x: 18, y: 10 },
@@ -450,6 +505,26 @@ export function createTextures(scene) {
     g.fillStyle(theme.grass, 1);
     g.fillRoundedRect(0, 0, 60, 14, 7);
     bake(g, `platform-${i}`, 60, 26);
+
+    // Падающая платформа: та же плитка, но с трещинами — по ним её и узнают.
+    g.fillStyle(theme.dirt, 1);
+    g.fillRoundedRect(0, 0, 60, 26, 8);
+    g.fillStyle(theme.grass, 1);
+    g.fillRoundedRect(0, 0, 60, 14, 7);
+    g.lineStyle(3, theme.dirtDark, 1);
+    g.lineBetween(14, 2, 20, 24);
+    g.lineBetween(38, 3, 32, 24);
+    g.lineBetween(46, 6, 52, 22);
+    bake(g, `platform-crack-${i}`, 60, 26);
+
+    // Движущаяся платформа: с рамкой, чтобы отличалась от обычной.
+    g.fillStyle(theme.dirtDark, 1);
+    g.fillRoundedRect(0, 0, 60, 26, 8);
+    g.fillStyle(theme.dirt, 1);
+    g.fillRoundedRect(3, 3, 54, 20, 6);
+    g.fillStyle(theme.grass, 1);
+    g.fillRoundedRect(3, 3, 54, 10, 5);
+    bake(g, `platform-move-${i}`, 60, 26);
 
     g.fillStyle(theme.hillFar, 1);
     g.fillEllipse(200, 210, 400, 300);
