@@ -57,6 +57,7 @@ export class GameScene extends Phaser.Scene {
     this.treatsTaken = 0;
     this.treatXp = 0;
     this.monstersDown = 0;
+    this.monsterXp = 0;
     this.finished = false;
     this.isPaused = false;
 
@@ -624,28 +625,10 @@ export class GameScene extends Phaser.Scene {
     this.treatsTaken += 1;
     this.treatXp += treat.xpValue;
     addXp(treat.xpValue);
-    this.treatBadge.setText(`${t('treats')}: ${this.treatsTaken}  (+${this.treatXp} ${t('xp')})`);
+    this.treatBadge.setText(`${t('treats')}: ${this.treatsTaken}  (+${this.treatXp} ${t('xpShort')})`);
     sfx.treat();
     this.puff(treat.x, treat.y, 0xf9a7c0);
-
-    const label = this.add
-      .text(treat.x, treat.y, `+${treat.xpValue} ${t('xp')}`, {
-        fontFamily: FONT,
-        fontSize: '30px',
-        color: '#ffffff',
-        fontStyle: 'bold',
-        stroke: '#7a4a28',
-        strokeThickness: 6,
-      })
-      .setOrigin(0.5)
-      .setDepth(50);
-    this.tweens.add({
-      targets: label,
-      y: treat.y - 70,
-      alpha: 0,
-      duration: 900,
-      onComplete: () => label.destroy(),
-    });
+    this.floatLabel(treat.x, treat.y, `+${treat.xpValue} ${t('xpShort')}`);
   }
 
   touchEnemy(enemy) {
@@ -660,11 +643,13 @@ export class GameScene extends Phaser.Scene {
       enemy.disableBody(true, true);
       this.player.setVelocityY(PHYS.bounceOnEnemy);
       this.monstersDown += 1;
+      this.monsterXp += XP.monster.easy;
       // Опыт за монстра начисляем сразу: если игрок потом потеряет все жизни,
       // старания всё равно зачтутся.
       addXp(XP.monster.easy);
       sfx.pop();
       this.puff(enemy.x, enemy.y, 0x8ed081);
+      this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy} ${t('xpShort')}`);
       return;
     }
 
@@ -781,6 +766,7 @@ export class GameScene extends Phaser.Scene {
         treats: this.treatsTaken,
         treatXp: this.treatXp,
         monsters: this.monstersDown,
+        monsterXp: this.monsterXp,
         timeMs: this.stageMs,
         stageXp,
         levelBefore: this.levelAtStart,
@@ -844,6 +830,28 @@ export class GameScene extends Phaser.Scene {
       )
     );
     this.pauseMenu = c;
+  }
+
+  /** Всплывающая надпись над предметом: сколько опыта только что дали. */
+  floatLabel(x, y, text) {
+    const label = this.add
+      .text(x, y, text, {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#7a4a28',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(50);
+    this.tweens.add({
+      targets: label,
+      y: y - 70,
+      alpha: 0,
+      duration: 900,
+      onComplete: () => label.destroy(),
+    });
   }
 
   /** Облачко искр — им отмечаем всё приятное и всё резкое. */

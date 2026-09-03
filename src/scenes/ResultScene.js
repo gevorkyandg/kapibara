@@ -30,6 +30,7 @@ export class ResultScene extends Phaser.Scene {
       treats,
       treatXp,
       monsters,
+      monsterXp,
       timeMs,
       stageXp,
       levelBefore,
@@ -68,39 +69,61 @@ export class ResultScene extends Phaser.Scene {
     }
 
     // Итоги строчками: слева название, справа число — так читается быстрее.
+    // Опыт подписан у каждого источника: иначе кажется, что за монстров и
+    // сладости его не дают.
+    const totalXp = stageXp + treatXp + monsterXp;
     const rows = [
       [t('collected'), `${coins} / ${total}  (${Math.round(percent * 100)}%)`],
       [t('time'), formatTime(timeMs)],
-      [t('treats'), treats > 0 ? `${treats}  (+${treatXp} ${t('xp')})` : '0'],
-      [t('neutralized'), String(monsters)],
+      [t('treats'), treats > 0 ? `${treats}   +${treatXp} ${t('xpShort')}` : '0'],
+      [t('neutralized'), monsters > 0 ? `${monsters}   +${monsterXp} ${t('xpShort')}` : '0'],
+      [t('xpGained'), `+${stageXp}`],
     ];
-    if (stageXp > 0) rows.push([t('xpGained'), `+${stageXp}`]);
 
     rows.forEach(([label, value], i) => {
-      const y = GAME_HEIGHT / 2 - 80 + i * 42;
+      const y = GAME_HEIGHT / 2 - 110 + i * 38;
       this.add
         .text(GAME_WIDTH / 2 - 300, y, label, {
           fontFamily: FONT,
-          fontSize: '28px',
+          fontSize: '27px',
           color: COLORS.inkDim,
         })
         .setOrigin(0, 0.5);
       this.add
         .text(GAME_WIDTH / 2 + 300, y, value, {
           fontFamily: FONT,
-          fontSize: '28px',
+          fontSize: '27px',
           color: COLORS.ink,
           fontStyle: 'bold',
         })
         .setOrigin(1, 0.5);
     });
 
+    // Итоговая строка опыта — отдельно и заметнее остальных.
+    const totalY = GAME_HEIGHT / 2 - 110 + rows.length * 38 + 10;
+    this.add
+      .text(GAME_WIDTH / 2 - 300, totalY, t('xpTotal'), {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: COLORS.ink,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0, 0.5);
+    this.add
+      .text(GAME_WIDTH / 2 + 300, totalY, `+${totalXp}`, {
+        fontFamily: FONT,
+        fontSize: '32px',
+        color: '#3f8f4f',
+        fontStyle: 'bold',
+      })
+      .setOrigin(1, 0.5);
+
     // Подсказка, почему этап не засчитан
     if (!passed) {
       this.add
         .text(
           GAME_WIDTH / 2,
-          GAME_HEIGHT / 2 + 130,
+          GAME_HEIGHT / 2 + 140,
           failedBy === 'lives' ? t('outOfLivesHint') : t('failedHint'),
           { fontFamily: FONT, fontSize: '24px', color: '#b4553f' }
         )
@@ -112,7 +135,7 @@ export class ResultScene extends Phaser.Scene {
     // поэтому плашка встаёт ниже подсказки, а не поверх неё.
     if (levelAfter > levelBefore) {
       const banner = this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + (passed ? 130 : 168), `${t('levelUp')}  ${t('playerLevel')} ${levelAfter}`, {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + (passed ? 140 : 182), `${t('levelUp')}  ${t('playerLevel')} ${levelAfter}`, {
           fontFamily: FONT,
           fontSize: '30px',
           color: '#3f8f4f',
