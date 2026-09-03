@@ -133,37 +133,28 @@ export function createTextures(scene) {
   g.strokeCircle(20, 20, 9);
   bake(g, 'coin', 40, 40);
 
-  // Круассан: полумесяц. Рисуем дугу дважды — сначала тёмную потолще,
-  // потом светлую потоньше: получается обводка, как у остальных картинок.
-  const croissantArc = (width, color) => {
-    g.lineStyle(width, color, 1);
-    g.beginPath();
-    g.arc(24, 36, 16, 1.08 * Math.PI, 1.92 * Math.PI);
-    g.strokePath();
-  };
-  croissantArc(20, 0xb07a32);
-  croissantArc(15, 0xe8b060);
-  // Загнутые рожки на концах дуги
-  g.fillStyle(0xe8b060, 1);
-  g.lineStyle(3, 0xb07a32, 1);
-  [
-    { x: 24 + Math.cos(1.08 * Math.PI) * 16, y: 36 + Math.sin(1.08 * Math.PI) * 16 },
-    { x: 24 + Math.cos(1.92 * Math.PI) * 16, y: 36 + Math.sin(1.92 * Math.PI) * 16 },
-  ].forEach((p) => {
-    g.fillCircle(p.x, p.y, 7);
-    g.strokeCircle(p.x, p.y, 7);
-  });
-  // Складки теста
-  g.lineStyle(2.5, 0xb07a32, 0.8);
-  [1.3, 1.5, 1.7].forEach((a) => {
-    g.lineBetween(
-      24 + Math.cos(a * Math.PI) * 10,
-      36 + Math.sin(a * Math.PI) * 10,
-      24 + Math.cos(a * Math.PI) * 21,
-      36 + Math.sin(a * Math.PI) * 21
-    );
-  });
-  bake(g, 'treat-croissant', 48, 48);
+  // Ломтик тортика: корж, прослойка с вареньем, розовая глазурь и вишенка.
+  g.fillStyle(0xf5d9a8, 1);
+  g.lineStyle(3, 0x8d5a2b, 1);
+  g.fillRoundedRect(8, 24, 32, 20, 4);
+  g.strokeRoundedRect(8, 24, 32, 20, 4);
+  g.fillStyle(0xe0454f, 1);
+  g.fillRect(9, 31, 30, 5); // прослойка
+  g.fillStyle(0xf9a7c0, 1);
+  g.lineStyle(3, 0xd06a8c, 1);
+  g.fillRoundedRect(5, 15, 38, 11, 5); // глазурь
+  g.strokeRoundedRect(5, 15, 38, 11, 5);
+  g.fillStyle(0xf9a7c0, 1);
+  g.fillCircle(14, 26, 4); // подтёки глазури
+  g.fillCircle(34, 26, 4);
+  g.fillStyle(0x2f7a3a, 1);
+  g.lineStyle(3, 0x2f7a3a, 1);
+  g.lineBetween(24, 12, 27, 5);
+  g.fillStyle(0xe0454f, 1);
+  g.lineStyle(3, 0x9c2b33, 1);
+  g.fillCircle(24, 10, 6); // вишенка
+  g.strokeCircle(24, 10, 6);
+  bake(g, 'treat-cake', 48, 48);
 
   // Кекс: розовая шапочка, гофрированная корзинка, вишенка.
   const cupBasket = [
@@ -328,6 +319,39 @@ export function createTextures(scene) {
     );
   });
   bake(g, 'icon-jump', 72, 72);
+
+  // Сердечки для жизней: целое и потраченное.
+  const heart = (cx, cy, s, fill, stroke) => {
+    g.fillStyle(fill, 1);
+    g.lineStyle(4, stroke, 1);
+    g.fillCircle(cx - 6 * s, cy - 4 * s, 7 * s);
+    g.fillCircle(cx + 6 * s, cy - 4 * s, 7 * s);
+    const pts = [
+      { x: cx - 12.6 * s, y: cy - 1 * s },
+      { x: cx + 12.6 * s, y: cy - 1 * s },
+      { x: cx, y: cy + 14 * s },
+    ];
+    g.fillPoints(pts, true);
+    g.strokePoints(pts, true);
+    g.strokeCircle(cx - 6 * s, cy - 4 * s, 7 * s);
+    g.strokeCircle(cx + 6 * s, cy - 4 * s, 7 * s);
+    // Обводка кругов перекрывает стык — закрашиваем его обратно.
+    g.fillStyle(fill, 1);
+    g.fillRect(cx - 8 * s, cy - 6 * s, 16 * s, 8 * s);
+  };
+
+  heart(20, 18, 1, 0xe0454f, 0x9c2b33);
+  bake(g, 'heart', 40, 40);
+
+  heart(20, 18, 1, 0x8b8178, 0x5f574f);
+  bake(g, 'heart-empty', 40, 40);
+
+  g.fillStyle(0xffd0d4, 1);
+  g.lineStyle(4, 0xc26a72, 1);
+  g.fillCircle(36, 36, 32);
+  g.strokeCircle(36, 36, 32);
+  heart(36, 33, 1.5, 0xe0454f, 0x9c2b33);
+  bake(g, 'icon-heart', 72, 72);
 
   g.fillStyle(0xffe08a, 1);
   g.lineStyle(4, 0xc9922a, 1);

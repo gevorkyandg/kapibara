@@ -34,14 +34,13 @@ export const ABILITIES = {
 };
 
 /**
- * Звёзды за уровень — по доле собранных монет (вкусняшки не в счёт).
- * Меньше 50% — уровень не пройден.
+ * Жизни и урон (ТЗ). Звёзды и опыт живут в progression.js.
  */
-export const STAR_RULES = [
-  { stars: 3, percent: 1.0 },
-  { stars: 2, percent: 0.7 },
-  { stars: 1, percent: 0.5 },
-];
+export const LIVES = {
+  // Неуязвимость после потери жизни. На пропасть не распространяется:
+  // упал — потерял жизнь, сколько бы секунд ни прошло.
+  invulnMs: 2000,
+};
 
 /**
  * Реклама. Межстраничную показываем только между уровнями и редко: частая
@@ -53,15 +52,8 @@ export const ADS = {
   minIntervalMs: 180000, // не чаще раза в 3 минуты
 };
 
-/** Сколько монет даёт вкусняшка (на рейтинг не влияет). */
-export const TREAT_COINS = 5;
-
-/** Шанс, что в помеченной точке появится вкусняшка. */
+/**
+ * Шанс, что в помеченной точке появится сладость. По ТЗ их 2–5 на этап,
+ * и где они выпадут — каждый раз загадка.
+ */
 export const TREAT_CHANCE = 0.55;
-
-export function starsForPercent(percent) {
-  for (const rule of STAR_RULES) {
-    if (percent >= rule.percent - 1e-6) return rule.stars;
-  }
-  return 0;
-}

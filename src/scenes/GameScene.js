@@ -6,20 +6,35 @@ import {
   ROWS,
   PHYS,
   ABILITIES,
-  TREAT_COINS,
   TREAT_CHANCE,
-  starsForPercent,
+  LIVES,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCapybara } from '../capybara.js';
-import { addCoins, recordLevel, hasItem, flush } from '../save.js';
-import { t } from '../i18n.js';
+import {
+  addCoins,
+  addXp,
+  addStats,
+  recordStage,
+  hasItem,
+  getBonuses,
+  getMaxLives,
+  getLevel,
+  flush,
+} from '../save.js';
+import { starsFor, XP } from '../progression.js';
+import { t, formatTime } from '../i18n.js';
 import { makeButton, panel, coinBadge, FONT, COLORS } from '../ui.js';
 import { sfx, unlockAudio } from '../audio.js';
 import { platform } from '../platform/index.js';
 
-const TREAT_KEYS = ['treat-croissant', 'treat-cupcake', 'treat-icecream'];
+/** Сладости и сколько опыта они дают (ТЗ). */
+const TREATS = [
+  { key: 'treat-cupcake', xp: XP.treat.cupcake },
+  { key: 'treat-icecream', xp: XP.treat.icecream },
+  { key: 'treat-cake', xp: XP.treat.cake },
+];
 
 /** Сама игра: один уровень от старта до флага. */
 export class GameScene extends Phaser.Scene {
@@ -39,10 +54,24 @@ export class GameScene extends Phaser.Scene {
 
     this.totalCoins = countCoins(this.levelIndex);
     this.coinsCollected = 0;
-    this.treatCoins = 0;
-    this.deaths = 0;
+    this.treatsTaken = 0;
+    this.treatXp = 0;
+    this.monstersDown = 0;
     this.finished = false;
     this.isPaused = false;
+
+    // Жизни и таймер этапа (ТЗ). Жизней столько, сколько даёт уровень игрока
+    // плюс купленные в магазине.
+    this.maxLives = getMaxLives();
+    this.lives = this.maxLives;
+    this.lostLife = false; // потеря жизни лишает третьей звезды
+    this.stageMs = 0;
+    this.levelAtStart = getLevel();
+
+    // Прибавки за уровень игрока — именно они делают поздние этапы проходимыми.
+    const bonus = getBonuses();
+    this.walkSpeed = PHYS.walkSpeed + bonus.speed;
+    this.jumpVelocity = PHYS.jumpVelocity - bonus.jump; // скорость прыжка отрицательная
 
     // Состояние умений. Время везде — игровое (мс от старта сцены).
     this.airJumpUsed = false;
@@ -198,8 +227,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   addTreat(x, y) {
-    const key = Phaser.Utils.Array.GetRandom(TREAT_KEYS);
-    const treat = this.treats.create(x, y, key).setDepth(2);
+    // Чем дороже сладость по опыту, тем реже она попадается (ТЗ).
+    const pick = Phaser.Math.RND.pick([
+      TREATS[0], TREATS[0], TREATS[0],
+      TREATS[1], TREATS[1],
+      TREATS[2],
+    ]);
+    const treat = this.treats.create(x, y, pick.key).setDepth(2);
+    treat.xpValue = pick.xp;
     treat.body.setSize(38, 38).setOffset(5, 5);
     this.tweens.add({
       targets: treat,
@@ -248,9 +283,28 @@ export class GameScene extends Phaser.Scene {
     fixed(panel(this, 150, 46, 260, 62, COLORS.panel, COLORS.panelEdge));
     this.coinBadge = fixed(coinBadge(this, 44, 46, `0 / ${this.totalCoins}`, 34));
 
+    // Сердечки жизней под счётчиком монет.
+    this.hearts = [];
+    for (let i = 0; i < this.maxLives; i++) {
+      this.hearts.push(fixed(this.add.image(44 + i * 42, 104, 'heart').setScale(0.85)));
+    }
+
+    // Таймер этапа — по ТЗ он идёт с начала и замирает на паузе.
+    fixed(panel(this, GAME_WIDTH / 2, 44, 190, 58, COLORS.panel, COLORS.panelEdge));
+    this.timerText = fixed(
+      this.add
+        .text(GAME_WIDTH / 2, 44, '00:00', {
+          fontFamily: FONT,
+          fontSize: '32px',
+          color: COLORS.ink,
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+    );
+
     this.treatBadge = fixed(
       this.add
-        .text(GAME_WIDTH / 2, 34, '', {
+        .text(GAME_WIDTH / 2, 84, '', {
           fontFamily: FONT,
           fontSize: '26px',
           color: '#ffffff',
@@ -377,6 +431,10 @@ export class GameScene extends Phaser.Scene {
       this.airJumpUsed = false;
     }
 
+    // Таймер этапа идёт, пока игрок играет: пауза и финиш его останавливают.
+    this.stageMs += delta;
+    this.timerText.setText(formatTime(this.stageMs));
+
     this.handleMovement(time, onFloor);
     this.updateWalkers();
     this.updateHazards();
@@ -384,7 +442,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAbilityIcons(time);
 
     // Упала в пропасть
-    if (this.player.y > this.worldH + 120) this.hurt(time);
+    if (this.player.y > this.worldH + 120) this.hurt(time, true);
 
     // Точка возврата: последнее место, где капибара спокойно стояла на земле.
     if (onFloor && time - this.lastCheckpointAt > 400 && Math.abs(body.velocity.y) < 40) {
@@ -424,7 +482,7 @@ export class GameScene extends Phaser.Scene {
       this.puff(this.player.x, this.player.y + 20, 0xffe08a);
     }
     const boosting = time < this.boostUntil;
-    const speed = PHYS.walkSpeed * (boosting ? ABILITIES.speedBoost.multiplier : 1);
+    const speed = this.walkSpeed * (boosting ? ABILITIES.speedBoost.multiplier : 1);
 
     if (left && !right) {
       this.player.setVelocityX(-speed);
@@ -443,7 +501,7 @@ export class GameScene extends Phaser.Scene {
     const canGroundJump = onFloor || time - this.lastFloorTime < 110;
 
     if (wantsJump && canGroundJump) {
-      this.player.setVelocityY(PHYS.jumpVelocity);
+      this.player.setVelocityY(this.jumpVelocity);
       this.jumpBufferedAt = -9999;
       this.lastFloorTime = -9999;
       sfx.jump();
@@ -455,7 +513,7 @@ export class GameScene extends Phaser.Scene {
       !this.airJumpUsed &&
       time >= this.doubleJumpReadyAt
     ) {
-      this.player.setVelocityY(PHYS.jumpVelocity * 0.92);
+      this.player.setVelocityY(this.jumpVelocity * 0.92);
       this.airJumpUsed = true;
       this.doubleJumpReadyAt = time + ABILITIES.doubleJump.cooldown;
       this.jumpBufferedAt = -9999;
@@ -511,7 +569,7 @@ export class GameScene extends Phaser.Scene {
 
     const vx = Math.abs(this.player.body.velocity.x);
     const state = !onFloor ? 'air' : vx > 30 ? 'walk' : 'idle';
-    this.capy.animate(time, state, vx / PHYS.walkSpeed);
+    this.capy.animate(time, state, vx / this.walkSpeed);
 
     // На ускорении капибара чуть вытягивается вперёд и приседает — видно,
     // что бежит. Знак scaleX задаёт, куда она смотрит.
@@ -562,13 +620,16 @@ export class GameScene extends Phaser.Scene {
   collectTreat(treat) {
     if (!treat.active) return;
     treat.disableBody(true, true);
-    this.treatCoins += TREAT_COINS;
-    this.treatBadge.setText(`${t('treatBonus')}: +${this.treatCoins}`);
+    // По ТЗ сладость даёт опыт, а не монеты, и на звёзды не влияет.
+    this.treatsTaken += 1;
+    this.treatXp += treat.xpValue;
+    addXp(treat.xpValue);
+    this.treatBadge.setText(`${t('treats')}: ${this.treatsTaken}  (+${this.treatXp} ${t('xp')})`);
     sfx.treat();
     this.puff(treat.x, treat.y, 0xf9a7c0);
 
     const label = this.add
-      .text(treat.x, treat.y, `+${TREAT_COINS}`, {
+      .text(treat.x, treat.y, `+${treat.xpValue} ${t('xp')}`, {
         fontFamily: FONT,
         fontSize: '30px',
         color: '#ffffff',
@@ -598,6 +659,10 @@ export class GameScene extends Phaser.Scene {
     if (fallingOnto) {
       enemy.disableBody(true, true);
       this.player.setVelocityY(PHYS.bounceOnEnemy);
+      this.monstersDown += 1;
+      // Опыт за монстра начисляем сразу: если игрок потом потеряет все жизни,
+      // старания всё равно зачтутся.
+      addXp(XP.monster.easy);
       sfx.pop();
       this.puff(enemy.x, enemy.y, 0x8ed081);
       return;
@@ -606,11 +671,22 @@ export class GameScene extends Phaser.Scene {
     this.hurt(time);
   }
 
-  /** Капибара пострадала: возвращаем к последней твёрдой земле. */
-  hurt(time) {
-    if (this.finished || time < this.invulnUntil) return;
-    this.invulnUntil = time + 1200;
-    this.deaths += 1;
+  /**
+   * Капибара пострадала. По ТЗ: минус жизнь, возврат на последнюю твёрдую
+   * поверхность и 2 секунды неуязвимости. Кончились жизни — этап заново.
+   *
+   * @param {number} time игровое время
+   * @param {boolean} fromPit падение в пропасть — от него неуязвимость не спасает
+   */
+  hurt(time, fromPit = false) {
+    if (this.finished) return;
+    if (!fromPit && time < this.invulnUntil) return;
+
+    this.lives -= 1;
+    this.lostLife = true;
+    this.invulnUntil = time + LIVES.invulnMs;
+    this.updateHearts();
+
     sfx.hurt();
     this.cameras.main.shake(180, 0.008);
     this.cameras.main.flash(200, 255, 180, 180);
@@ -619,14 +695,25 @@ export class GameScene extends Phaser.Scene {
     this.player.setPosition(this.checkpoint.x, this.checkpoint.y);
     this.capy.setPosition(this.checkpoint.x, this.checkpoint.y);
 
+    if (this.lives <= 0) {
+      this.failStage();
+      return;
+    }
+
     // Мигание, пока действует неуязвимость.
     this.tweens.add({
       targets: this.capy,
       alpha: 0.3,
-      duration: 140,
+      duration: 160,
       yoyo: true,
-      repeat: 4,
+      repeat: Math.floor(LIVES.invulnMs / 320),
       onComplete: () => this.capy.setAlpha(1),
+    });
+  }
+
+  updateHearts() {
+    this.hearts.forEach((heart, i) => {
+      heart.setTexture(i < this.lives ? 'heart' : 'heart-empty');
     });
   }
 
@@ -637,25 +724,67 @@ export class GameScene extends Phaser.Scene {
     platform.gameplayStop();
 
     const percent = this.totalCoins ? this.coinsCollected / this.totalCoins : 1;
-    const stars = starsForPercent(percent);
-    const earned = this.coinsCollected + this.treatCoins;
+    const stars = starsFor(percent, this.lostLife);
 
     // Монетки достаются игроку в любом случае — они собраны честно.
-    addCoins(earned);
-    if (stars > 0) recordLevel(this.levelIndex, percent, stars);
-    else flush();
+    addCoins(this.coinsCollected);
+    this.saveStageStats();
+
+    // Опыт за этап — только за прирост звёзд, чтобы лёгкий этап нельзя было
+    // фармить бесконечно. Опыт за монстров и сладости уже начислен по ходу.
+    const stageXp = stars > 0 ? recordStage(this.levelIndex, { percent, stars, timeMs: this.stageMs }) : 0;
+    flush();
 
     stars > 0 ? sfx.win() : sfx.fail();
+    this.showResult({ stars, percent, stageXp, failedBy: stars > 0 ? null : 'coins' }, 400);
+  }
 
-    this.time.delayedCall(400, () => {
+  /** Жизни кончились: этап не пройден, придётся заново (ТЗ). */
+  failStage() {
+    if (this.finished) return;
+    this.finished = true;
+    this.player.setVelocity(0, 0);
+    platform.gameplayStop();
+
+    // Собранные монетки остаются игроку, но этап не засчитан: ни звёзд, ни
+    // опыта за этап.
+    addCoins(this.coinsCollected);
+    this.saveStageStats();
+    flush();
+
+    sfx.fail();
+    this.showResult(
+      { stars: 0, percent: this.totalCoins ? this.coinsCollected / this.totalCoins : 0, stageXp: 0, failedBy: 'lives' },
+      700
+    );
+  }
+
+  saveStageStats() {
+    addStats({
+      playMs: this.stageMs,
+      coins: this.coinsCollected,
+      treats: this.treatsTaken,
+      monsters: this.monstersDown,
+    });
+  }
+
+  showResult({ stars, percent, stageXp, failedBy }, delay) {
+    this.time.delayedCall(delay, () => {
       this.scene.pause();
       this.scene.launch('ResultScene', {
         levelIndex: this.levelIndex,
         stars,
         percent,
+        failedBy, // null | 'coins' | 'lives'
         coins: this.coinsCollected,
         total: this.totalCoins,
-        treatCoins: this.treatCoins,
+        treats: this.treatsTaken,
+        treatXp: this.treatXp,
+        monsters: this.monstersDown,
+        timeMs: this.stageMs,
+        stageXp,
+        levelBefore: this.levelAtStart,
+        levelAfter: getLevel(),
       });
     });
   }

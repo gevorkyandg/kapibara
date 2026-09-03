@@ -2,14 +2,24 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { createBackground } from '../background.js';
 import { SHOP_ITEMS } from '../shop.js';
-import { getSave, hasItem, buyItem } from '../save.js';
+import {
+  getSave,
+  getLevel,
+  hasItem,
+  buyItem,
+  buyExtraLife,
+  getExtraLives,
+  MAX_BOUGHT_LIVES,
+} from '../save.js';
 import { t } from '../i18n.js';
 import { makeButton, panel, coinBadge, FONT, COLORS } from '../ui.js';
 import { sfx } from '../audio.js';
 
 /**
- * Магазин. Пока два товара, но список берётся из shop.js — новые улучшения
- * добавляются туда одной записью, сцену трогать не нужно.
+ * Магазин. Товары берутся из shop.js — новое улучшение добавляется туда одной
+ * записью, сцену трогать не нужно.
+ *
+ * Доступ к товару по ТЗ двойной: нужен и уровень игрока, и монеты.
  */
 export class ShopScene extends Phaser.Scene {
   constructor() {
@@ -20,9 +30,9 @@ export class ShopScene extends Phaser.Scene {
     createBackground(this, 1, GAME_WIDTH);
 
     this.add
-      .text(GAME_WIDTH / 2, 80, t('shop'), {
+      .text(GAME_WIDTH / 2, 70, t('shop'), {
         fontFamily: FONT,
-        fontSize: '58px',
+        fontSize: '54px',
         color: '#ffffff',
         fontStyle: 'bold',
         stroke: '#7a4a28',
@@ -32,8 +42,19 @@ export class ShopScene extends Phaser.Scene {
 
     this.wallet = coinBadge(this, 40, 44, getSave().coins, 40);
 
+    this.add
+      .text(GAME_WIDTH - 40, 44, `${t('playerLevel')} ${getLevel()}`, {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#7a4a28',
+        strokeThickness: 6,
+      })
+      .setOrigin(1, 0.5);
+
     this.message = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 130, '', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 128, '', {
         fontFamily: FONT,
         fontSize: '26px',
         color: '#ffffff',
@@ -43,78 +64,105 @@ export class ShopScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const cardW = 420;
-    const gap = 60;
+    const cardW = 380;
+    const gap = 28;
     const totalW = SHOP_ITEMS.length * cardW + (SHOP_ITEMS.length - 1) * gap;
     const startX = (GAME_WIDTH - totalW) / 2 + cardW / 2;
 
     this.cards = SHOP_ITEMS.map((item, i) => {
       const x = startX + i * (cardW + gap);
       const y = GAME_HEIGHT / 2 - 10;
-      panel(this, x, y, cardW, 380);
+      panel(this, x, y, cardW, 400);
 
-      this.add.image(x, y - 118, item.icon).setScale(0.9);
+      this.add.image(x, y - 130, item.icon).setScale(0.85);
 
       this.add
-        .text(x, y - 34, t(item.nameKey), {
+        .text(x, y - 50, t(item.nameKey), {
           fontFamily: FONT,
-          fontSize: '32px',
+          fontSize: '30px',
           color: COLORS.ink,
           fontStyle: 'bold',
+          align: 'center',
+          wordWrap: { width: cardW - 50 },
         })
         .setOrigin(0.5);
 
       this.add
-        .text(x, y + 30, t(item.descKey), {
+        .text(x, y + 12, t(item.descKey), {
           fontFamily: FONT,
-          fontSize: '22px',
+          fontSize: '21px',
           color: COLORS.inkDim,
           align: 'center',
-          wordWrap: { width: cardW - 60 },
+          wordWrap: { width: cardW - 50 },
         })
         .setOrigin(0.5);
 
-      const price = coinBadge(this, x - 40, y + 92, item.price, 30);
+      const price = coinBadge(this, x - 40, y + 82, item.price, 30);
 
-      const btn = makeButton(this, x, y + 150, 260, 64, '', () => this.tryBuy(item), {
+      // Строка состояния: сколько куплено или какой уровень нужен.
+      const note = this.add
+        .text(x, y + 122, '', { fontFamily: FONT, fontSize: '20px', color: COLORS.inkDim })
+        .setOrigin(0.5);
+
+      const btn = makeButton(this, x, y + 165, 260, 62, '', () => this.tryBuy(item), {
         fill: COLORS.green,
         edge: COLORS.greenEdge,
       });
 
-      return { item, btn, price };
+      return { item, btn, price, note };
     });
 
     this.refresh();
 
-    makeButton(this, 140, GAME_HEIGHT - 60, 200, 66, t('back'), () => this.scene.start('MenuScene'), {
+    makeButton(this, 140, GAME_HEIGHT - 56, 200, 64, t('back'), () => this.scene.start('MenuScene'), {
       fill: COLORS.panel,
       edge: COLORS.panelEdge,
     });
   }
 
   tryBuy(item) {
-    if (hasItem(item.id)) return;
-
+    const level = getLevel();
+    if (level < item.minLevel) {
+      this.say(t('needLevel', { n: item.minLevel }));
+      return;
+    }
     if (getSave().coins < item.price) {
-      // Не хватает монеток — говорим об этом, а не молчим.
-      this.message.setText(t('notEnough'));
-      this.tweens.add({ targets: this.message, scale: { from: 1.2, to: 1 }, duration: 250 });
-      sfx.fail();
+      this.say(t('notEnough'));
       return;
     }
 
-    buyItem(item.id, item.price);
+    const bought = item.kind === 'life' ? buyExtraLife(item.price) : buyItem(item.id, item.price);
+    if (!bought) return;
+
     sfx.buy();
     this.message.setText('');
     this.refresh();
   }
 
+  /** Сказать игроку, почему не получилось: молчащая кнопка раздражает. */
+  say(text) {
+    this.message.setText(text);
+    this.tweens.add({ targets: this.message, scale: { from: 1.15, to: 1 }, duration: 250 });
+    sfx.fail();
+  }
+
   refresh() {
+    const level = getLevel();
     this.wallet.value.setText(String(getSave().coins));
-    this.cards.forEach(({ item, btn, price }) => {
-      const owned = hasItem(item.id);
+
+    this.cards.forEach(({ item, btn, price, note }) => {
+      const locked = level < item.minLevel;
+      const lives = getExtraLives();
+      const owned = item.kind === 'life' ? lives >= MAX_BOUGHT_LIVES : hasItem(item.id);
+
+      if (item.kind === 'life') {
+        note.setText(locked ? t('needLevel', { n: item.minLevel }) : t('boughtOf', { n: lives, m: MAX_BOUGHT_LIVES }));
+      } else {
+        note.setText(locked ? t('needLevel', { n: item.minLevel }) : '');
+      }
+
       btn.label.setText(owned ? t('bought') : t('buy'));
-      btn.setEnabled(!owned);
+      btn.setEnabled(!owned && !locked);
       price.setAlpha(owned ? 0.35 : 1);
     });
   }
