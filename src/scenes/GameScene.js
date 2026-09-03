@@ -13,6 +13,7 @@ import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCapybara } from '../capybara.js';
 import {
+  getSave,
   addCoins,
   addXp,
   addStats,
@@ -23,7 +24,14 @@ import {
   getLevel,
   flush,
 } from '../save.js';
-import { starsFor, XP } from '../progression.js';
+import {
+  starsFor,
+  XP,
+  levelProgress,
+  levelBonuses,
+  xpForLevel,
+  MAX_LEVEL,
+} from '../progression.js';
 import { t, formatTime } from '../i18n.js';
 import { makeButton, panel, coinBadge, FONT, COLORS } from '../ui.js';
 import { sfx, unlockAudio } from '../audio.js';
@@ -303,18 +311,8 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
     );
 
-    this.treatBadge = fixed(
-      this.add
-        .text(GAME_WIDTH / 2, 84, '', {
-          fontFamily: FONT,
-          fontSize: '26px',
-          color: '#ffffff',
-          fontStyle: 'bold',
-          stroke: '#7a4a28',
-          strokeThickness: 6,
-        })
-        .setOrigin(0.5, 0)
-    );
+    // Шкала опыта и уровень игрока — всегда на виду, под таймером.
+    this.buildXpBar(fixed);
 
     fixed(
       makeButton(this, GAME_WIDTH - 70, 46, 92, 56, '❚❚', () => this.setPaused(true), {
@@ -359,6 +357,176 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(100);
     this.tweens.add({ targets: hint, alpha: 0, delay: 3500, duration: 900 });
+  }
+
+  /**
+   * Шкала опыта под таймером: слева кружок с уровнем, справа сама полоса.
+   * Она наполняется прямо во время игры — видно, что монстры и сладости
+   * действительно что-то дают.
+   */
+  buildXpBar(fixed) {
+    const w = 420;
+    const x = GAME_WIDTH / 2;
+    const y = 96;
+
+    this.xpBarGeom = { x: x - w / 2 + 34, y, w: w - 34, h: 20 };
+
+    fixed(panel(this, x, y, w, 46, COLORS.panel, COLORS.panelEdge));
+
+    this.xpBar = fixed(this.add.graphics());
+
+    this.levelBadge = fixed(this.add.circle(x - w / 2 + 4, y, 22, 0x7bc36a));
+    this.levelBadge.setStrokeStyle(4, 0x4f9c45);
+    this.levelText = fixed(
+      this.add
+        .text(x - w / 2 + 4, y, String(this.levelAtStart), {
+          fontFamily: FONT,
+          fontSize: '24px',
+          color: '#ffffff',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+    );
+
+    this.xpText = fixed(
+      this.add
+        .text(x + w / 2 - 16, y, '', {
+          fontFamily: FONT,
+          fontSize: '18px',
+          color: COLORS.ink,
+          fontStyle: 'bold',
+        })
+        .setOrigin(1, 0.5)
+    );
+
+    this.currentLevel = this.levelAtStart;
+    this.refreshXpBar();
+  }
+
+  refreshXpBar() {
+    const level = getLevel();
+    const xp = getSave().xp;
+    const { x, y, w, h } = this.xpBarGeom;
+
+    this.xpBar.clear();
+    this.xpBar.fillStyle(0xe2d6c0, 1);
+    this.xpBar.fillRoundedRect(x, y - h / 2, w, h, h / 2);
+
+    const filled = level >= MAX_LEVEL ? 1 : levelProgress(xp);
+    if (filled > 0) {
+      this.xpBar.fillStyle(0x7bc36a, 1);
+      this.xpBar.fillRoundedRect(x, y - h / 2, Math.max(h, w * filled), h, h / 2);
+    }
+
+    this.levelText.setText(String(level));
+    this.xpText.setText(level >= MAX_LEVEL ? t('maxLevel') : `${xp} / ${xpForLevel(level + 1)}`);
+  }
+
+  /**
+   * Проверяем после каждого начисления опыта: не вырос ли уровень.
+   * Если вырос — аура вокруг капибары, надпись сверху и сразу же новые
+   * прибавки, не дожидаясь конца этапа.
+   */
+  checkLevelUp() {
+    this.refreshXpBar();
+
+    const level = getLevel();
+    if (level <= this.currentLevel) return;
+
+    const before = levelBonuses(this.currentLevel);
+    const after = levelBonuses(level);
+    this.currentLevel = level;
+
+    // Прибавки применяем немедленно — иначе награда чувствуется только
+    // на следующем этапе.
+    this.walkSpeed = PHYS.walkSpeed + after.speed;
+    this.jumpVelocity = PHYS.jumpVelocity - after.jump;
+
+    const gains = [];
+    if (after.speed > before.speed) gains.push(`+${after.speed - before.speed} ${t('bonusSpeed')}`);
+    if (after.jump > before.jump) gains.push(`+${after.jump - before.jump} ${t('bonusJump')}`);
+    if (after.lives > before.lives) {
+      const extra = after.lives - before.lives;
+      this.maxLives += extra;
+      this.lives += extra;
+      this.addHearts(extra);
+      gains.push(`+${extra} ${t('bonusLife')}`);
+    }
+
+    this.showAura();
+    this.showLevelUpBanner(level, gains);
+    sfx.win();
+  }
+
+  /** Дорисовать сердечки, когда максимум жизней вырос прямо на этапе. */
+  addHearts(count) {
+    for (let i = 0; i < count; i++) {
+      const index = this.hearts.length;
+      this.hearts.push(
+        this.add
+          .image(44 + index * 42, 104, 'heart')
+          .setScale(0.85)
+          .setScrollFactor(0)
+          .setDepth(100)
+      );
+    }
+    this.updateHearts();
+  }
+
+  /** Аура вокруг героя: расходящиеся кольца в момент нового уровня. */
+  showAura() {
+    this.auraRings = this.auraRings || [];
+    for (let i = 0; i < 3; i++) {
+      const ring = this.add
+        .circle(this.player.x, this.player.y, 34, 0xffffff, 0)
+        .setStrokeStyle(7, 0xffe08a, 0.95)
+        .setDepth(5);
+      this.auraRings.push(ring);
+      this.tweens.add({
+        targets: ring,
+        scale: 3.2,
+        alpha: 0,
+        duration: 900,
+        delay: i * 180,
+        ease: 'Cubic.Out',
+        onComplete: () => {
+          this.auraRings = this.auraRings.filter((r) => r !== ring);
+          ring.destroy();
+        },
+      });
+    }
+    // Тёплая вспышка на самой капибаре
+    this.capy.bodyImage.setTintFill(0xfff3b0);
+    this.time.delayedCall(160, () => this.capy.bodyImage.clearTint());
+  }
+
+  showLevelUpBanner(level, gains) {
+    const lines = [`${t('levelUp')}  ${t('playerLevel')} ${level}`, ...gains];
+    const banner = this.add
+      .text(GAME_WIDTH / 2, 150, lines.join('\n'), {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        align: 'center',
+        stroke: '#3f7a3a',
+        strokeThickness: 7,
+        lineSpacing: 4,
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(120)
+      .setScale(0);
+
+    this.tweens.add({ targets: banner, scale: 1, duration: 420, ease: 'Back.Out' });
+    this.tweens.add({
+      targets: banner,
+      alpha: 0,
+      y: 120,
+      delay: 2200,
+      duration: 700,
+      onComplete: () => banner.destroy(),
+    });
   }
 
   useTouchHint() {
@@ -440,6 +608,9 @@ export class GameScene extends Phaser.Scene {
     this.updateWalkers();
     this.updateHazards();
     this.updateCapyVisual(time, onFloor);
+    if (this.auraRings?.length) {
+      this.auraRings.forEach((r) => r.setPosition(this.player.x, this.player.y));
+    }
     this.updateAbilityIcons(time);
 
     // Упала в пропасть
@@ -625,10 +796,10 @@ export class GameScene extends Phaser.Scene {
     this.treatsTaken += 1;
     this.treatXp += treat.xpValue;
     addXp(treat.xpValue);
-    this.treatBadge.setText(`${t('treats')}: ${this.treatsTaken}  (+${this.treatXp} ${t('xpShort')})`);
+    this.checkLevelUp();
     sfx.treat();
     this.puff(treat.x, treat.y, 0xf9a7c0);
-    this.floatLabel(treat.x, treat.y, `+${treat.xpValue} ${t('xpShort')}`);
+    this.floatLabel(treat.x, treat.y, `+${treat.xpValue}`);
   }
 
   touchEnemy(enemy) {
@@ -647,9 +818,10 @@ export class GameScene extends Phaser.Scene {
       // Опыт за монстра начисляем сразу: если игрок потом потеряет все жизни,
       // старания всё равно зачтутся.
       addXp(XP.monster.easy);
+      this.checkLevelUp();
       sfx.pop();
       this.puff(enemy.x, enemy.y, 0x8ed081);
-      this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy} ${t('xpShort')}`);
+      this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy}`);
       return;
     }
 
@@ -794,22 +966,28 @@ export class GameScene extends Phaser.Scene {
   }
 
   showPauseMenu() {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
     const c = this.add.container(0, 0).setScrollFactor(0).setDepth(200);
-    c.add(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45));
-    c.add(panel(this, GAME_WIDTH / 2, GAME_HEIGHT / 2, 520, 420));
+
+    c.add(this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45));
+    c.add(panel(this, cx, cy, 560, 620));
     c.add(
       this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, t('pause'), {
+        .text(cx, cy - 262, t('pause'), {
           fontFamily: FONT,
-          fontSize: '48px',
+          fontSize: '44px',
           color: COLORS.ink,
           fontStyle: 'bold',
         })
         .setOrigin(0.5)
     );
-    c.add(makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, 340, 72, t('resume'), () => this.setPaused(false)));
+
+    this.buildPauseStats(c, cx, cy - 100);
+
+    c.add(makeButton(this, cx, cy + 126, 360, 62, t('resume'), () => this.setPaused(false)));
     c.add(
-      makeButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40, 340, 72, t('retry'), () => {
+      makeButton(this, cx, cy + 198, 360, 62, t('retry'), () => {
         this.physics.resume();
         this.scene.restart({ levelIndex: this.levelIndex });
       })
@@ -817,10 +995,10 @@ export class GameScene extends Phaser.Scene {
     c.add(
       makeButton(
         this,
-        GAME_WIDTH / 2,
-        GAME_HEIGHT / 2 + 130,
-        340,
-        72,
+        cx,
+        cy + 270,
+        360,
+        62,
         t('menu'),
         () => {
           flush();
@@ -830,6 +1008,100 @@ export class GameScene extends Phaser.Scene {
       )
     );
     this.pauseMenu = c;
+  }
+
+  /**
+   * Характеристики героя на паузе. Базовое число белым, прибавка от уровней —
+   * зелёным рядом: сразу видно, что дала прокачка.
+   */
+  buildPauseStats(container, cx, top) {
+    const w = 470;
+    const h = 226;
+
+    const card = this.add.graphics();
+    card.fillStyle(0x3b2f26, 1);
+    card.fillRoundedRect(cx - w / 2, top - 40, w, h, 18);
+    container.add(card);
+
+    const level = getLevel();
+    const bonus = levelBonuses(level);
+
+    // Высоту прыжка считаем из скорости: h = v² / (2g). Игроку понятнее
+    // «на сколько подпрыгивает», чем внутренняя скорость.
+    const jumpHeight = (v) => Math.round((v * v) / (2 * PHYS.gravity));
+    const baseJump = jumpHeight(PHYS.jumpVelocity);
+    const nowJump = jumpHeight(this.jumpVelocity);
+
+    container.add(
+      this.add
+        .text(cx - w / 2 + 24, top - 8, `${t('playerLevel')} ${level}`, {
+          fontFamily: FONT,
+          fontSize: '30px',
+          color: '#ffe08a',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0.5)
+    );
+
+    const row = (label, base, gain, y) => {
+      container.add(
+        this.add
+          .text(cx - w / 2 + 24, y, label, {
+            fontFamily: FONT,
+            fontSize: '24px',
+            color: '#cfc2b4',
+          })
+          .setOrigin(0, 0.5)
+      );
+      // Сначала базовое число, следом зелёная прибавка: «240 +54».
+      const right = cx + w / 2 - 24;
+      let gainWidth = 0;
+      if (gain > 0) {
+        const gainText = this.add
+          .text(right, y, `+${gain}`, {
+            fontFamily: FONT,
+            fontSize: '26px',
+            color: '#7bdc6a',
+            fontStyle: 'bold',
+          })
+          .setOrigin(1, 0.5);
+        container.add(gainText);
+        gainWidth = gainText.width + 12;
+      }
+      container.add(
+        this.add
+          .text(right - gainWidth, y, String(base), {
+            fontFamily: FONT,
+            fontSize: '26px',
+            color: '#ffffff',
+            fontStyle: 'bold',
+          })
+          .setOrigin(1, 0.5)
+      );
+    };
+
+    row(t('statSpeed'), PHYS.walkSpeed, this.walkSpeed - PHYS.walkSpeed, top + 44);
+    row(t('statJump'), baseJump, nowJump - baseJump, top + 88);
+
+    // Жизни — просто иконками, сколько есть
+    container.add(
+      this.add
+        .text(cx - w / 2 + 24, top + 138, t('lives'), {
+          fontFamily: FONT,
+          fontSize: '24px',
+          color: '#cfc2b4',
+        })
+        .setOrigin(0, 0.5)
+    );
+    for (let i = 0; i < this.maxLives; i++) {
+      const fromRight = this.maxLives - 1 - i;
+      container.add(
+        this.add
+          .image(cx + w / 2 - 24 - fromRight * 36, top + 138, i < this.lives ? 'heart' : 'heart-empty')
+          .setScale(0.72)
+          .setOrigin(1, 0.5)
+      );
+    }
   }
 
   /** Всплывающая надпись над предметом: сколько опыта только что дали. */

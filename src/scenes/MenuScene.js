@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, DEBUG } from '../config.js';
 import { LEVELS } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCapybara } from '../capybara.js';
@@ -188,11 +188,14 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(1, 0.5);
     });
 
-    makeButton(this, x, y + 190, 240, 56, t('statsReset'), () => this.askResetStats(), {
-      fill: COLORS.panel,
-      edge: COLORS.panelEdge,
-      fontSize: 24,
-    });
+    // Сброс статистики — пока инструмент для тестирования (DEBUG в config.js).
+    if (DEBUG.statsReset) {
+      makeButton(this, x, y + 190, 240, 56, t('statsReset'), () => this.askResetStats(), {
+        fill: COLORS.panel,
+        edge: COLORS.panelEdge,
+        fontSize: 24,
+      });
+    }
   }
 
   buildButtons() {

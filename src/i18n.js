@@ -35,6 +35,11 @@ const STRINGS = {
     xp: 'Опыт',
     lives: 'Жизни',
     levelUp: 'Новый уровень!',
+    bonusSpeed: 'к скорости',
+    bonusJump: 'к прыжку',
+    bonusLife: 'жизнь',
+    statSpeed: 'Скорость бега',
+    statJump: 'Высота прыжка',
     stagesPassed: 'Пройдено этапов',
     maxLevel: 'Максимум',
 
@@ -105,6 +110,11 @@ const STRINGS = {
     xp: 'XP',
     lives: 'Lives',
     levelUp: 'Level up!',
+    bonusSpeed: 'speed',
+    bonusJump: 'jump',
+    bonusLife: 'life',
+    statSpeed: 'Run speed',
+    statJump: 'Jump height',
     stagesPassed: 'Stages cleared',
     maxLevel: 'Max',
 
