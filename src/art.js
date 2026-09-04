@@ -539,6 +539,22 @@ export function createTextures(scene) {
   });
   bake(g, 'sign2', 48, 62);
 
+  // Три знака — три валуна подряд.
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(20, 30, 8, 30, 3);
+  g.strokeRoundedRect(20, 30, 8, 30, 3);
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(4, 0xc9922a, 1);
+  g.fillRoundedRect(2, 2, 44, 32, 8);
+  g.strokeRoundedRect(2, 2, 44, 32, 8);
+  g.fillStyle(0x5a3a22, 1);
+  [11, 24, 37].forEach((x) => {
+    g.fillRoundedRect(x - 2.5, 8, 5, 15, 2.5);
+    g.fillCircle(x, 28, 3);
+  });
+  bake(g, 'sign3', 48, 62);
+
   // Табличка с ульем: предупреждает не об одной осе, а о целом рое (ТЗ роя).
   // Улей рисуем полосами-ярусами с летком внизу — так он читается сразу и не
   // путается с восклицательным знаком.

@@ -8,6 +8,7 @@ import {
   LIVES,
   SLOPE_STEPS,
   HIVE,
+  RANDOM_POOL,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
@@ -240,10 +241,16 @@ export class GameScene extends Phaser.Scene {
           }
 
           case 'z':
-            // Нора видна заранее — по ТЗ её всегда должно быть заметно.
-            this.add.image(cx, top + TILE - 14, 'burrow').setDepth(1);
-            this.addMonster(ch, cx, cy);
+            this.placeMonster(ch, cx, cy, top);
             break;
+
+          case '?': {
+            // Случайный монстр. Нужен генератору: в описании этапа стоит
+            // «здесь кто-нибудь», а кто именно — решается при сборке.
+            const пул = this.levelData.randomPool || RANDOM_POOL;
+            this.placeMonster(Phaser.Math.RND.pick(пул), cx, cy, top);
+            break;
+          }
 
           case '~': {
             // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).
@@ -1120,6 +1127,7 @@ export class GameScene extends Phaser.Scene {
   updateMonsters(time) {
     const шаг = (m) => {
       if (!m || !m.active || !m.type) return;
+      if (m.type.ground && m.dir) this.stepOverLedge(m, m.dir);
       m.type.update?.(this, m, time);
     };
     this.walkers.children.iterate(шаг);
@@ -1173,9 +1181,9 @@ export class GameScene extends Phaser.Scene {
    * Тело 52×56, проверяем девять точек — этого хватает, чтобы поймать
    * застревание в стене.
    */
-  overlapsSolid(x, y) {
-    for (const px of [x - 22, x, x + 22]) {
-      for (const py of [y - 24, y, y + 24]) {
+  overlapsSolid(x, y, halfW = 22, halfH = 24) {
+    for (const px of [x - halfW, x, x + halfW]) {
+      for (const py of [y - halfH, y, y + halfH]) {
         if (this.isSolidAtPixel(px, py)) return true;
       }
     }
@@ -1468,17 +1476,26 @@ export class GameScene extends Phaser.Scene {
    */
   stepUpSlope(onFloor) {
     if (!onFloor) return;
-    const тело = this.player.body;
-    const vx = тело.velocity.x;
+    const vx = this.player.body.velocity.x;
     if (Math.abs(vx) < 20) return;
-    const dir = Math.sign(vx);
-    if (!(dir > 0 ? тело.blocked.right : тело.blocked.left)) return;
+    this.stepOverLedge(this.player, Math.sign(vx));
+  }
 
-    const впереди = this.player.x + dir * (тело.halfWidth + 4);
-    if (!this.isSolidAtPixel(впереди, тело.bottom - 1)) return; // упёрлись не в пол
+  /**
+   * Заход на мелкую ступеньку склона. Одна на всех: и герой, и ходячие
+   * монстры иначе упираются в 1.2-пиксельный порог и встают намертво.
+   *
+   * Порог низкий нарочно: уступ выше ступеньки склона так и остаётся
+   * препятствием, через него положено прыгать.
+   */
+  stepOverLedge(sprite, dir) {
+    const тело = sprite.body;
+    if (!тело.blocked.down) return false;
+    if (!(dir > 0 ? тело.blocked.right : тело.blocked.left)) return false;
 
-    // Ищем верх препятствия. Выше мелкой ступеньки — это уже уступ, и через
-    // него надо прыгать: так и задумано, иначе капибара въезжала бы на стены.
+    const впереди = sprite.x + dir * (тело.halfWidth + 4);
+    if (!this.isSolidAtPixel(впереди, тело.bottom - 1)) return false;
+
     let подъём = null;
     const предел = Math.ceil(SLOPE_STEP) + 4;
     for (let h = 1; h <= предел; h++) {
@@ -1487,11 +1504,16 @@ export class GameScene extends Phaser.Scene {
         break;
       }
     }
-    if (подъём === null) return;
-    if (this.overlapsSolid(this.player.x + dir * 4, this.player.y - подъём)) return;
+    if (подъём === null) return false;
+    if (this.overlapsSolid(sprite.x + dir * 4, sprite.y - подъём, тело.halfWidth, тело.halfHeight))
+      return false;
 
-    this.player.y -= подъём;
-    this.player.x += dir * 2;
+    sprite.y -= подъём;
+    sprite.x += dir * 2;
+    // Иначе патруль тут же решит, что упёрся в стену, и развернётся.
+    тело.blocked.left = false;
+    тело.blocked.right = false;
+    return true;
   }
 
   /**
@@ -1539,6 +1561,14 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Поставить монстра, не забыв про нору у змеи. */
+  placeMonster(symbol, cx, cy, top) {
+    if (!MONSTERS[symbol]) return null;
+    // Нора видна заранее — по ТЗ её всегда должно быть заметно.
+    if (symbol === 'z') this.add.image(cx, top + TILE - 14, 'burrow').setDepth(1);
+    return this.addMonster(symbol, cx, cy);
+  }
+
   /** Ряд верхней твёрдой клетки в столбце, считая от ряда «откуда смотрим». */
   surfaceRow(col, отРяда) {
     if (col < 0 || col >= this.cols) return this.rows;
@@ -1577,7 +1607,7 @@ export class GameScene extends Phaser.Scene {
       spawnX: верх * TILE + TILE / 2,
       spawnY: рядВерха * TILE - 40,
       dir,
-      count: Math.min(сколько, 2),
+      count: Math.min(сколько, 3),
       fired: false,
     });
   }
@@ -1600,7 +1630,7 @@ export class GameScene extends Phaser.Scene {
       const знакX = run.x - run.dir * 200;
       const знакРяд = this.surfaceRow(Math.floor(знакX / TILE), 0);
       const знак = this.add
-        .image(знакX, знакРяд * TILE - 31, run.count > 1 ? 'sign2' : 'sign')
+        .image(знакX, знакРяд * TILE - 31, ['sign', 'sign2', 'sign3'][run.count - 1] || 'sign3')
         .setDepth(4);
       this.tweens.add({ targets: знак, angle: 7, duration: 70, yoyo: true, repeat: 13 });
 

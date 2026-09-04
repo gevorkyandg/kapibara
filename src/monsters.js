@@ -19,8 +19,15 @@ function patrol(scene, m) {
   else if (m.body.blocked.right) m.dir = -1;
 
   if (m.body.blocked.down) {
+    // Край площадки или скат? Смотрим не в одну точку, а вглубь: на склоне
+    // земля впереди ниже на те же 30 пикселей, и по одной точке монстр решал,
+    // что перед ним обрыв, и разворачивался у каждой ступеньки.
     const ahead = m.x + m.dir * 30;
-    if (!scene.isSolidAtPixel(ahead, m.body.bottom + 10)) m.dir *= -1;
+    let опора = false;
+    for (let d = 10; d <= 44 && !опора; d += 8) {
+      if (scene.isSolidAtPixel(ahead, m.body.bottom + d)) опора = true;
+    }
+    if (!опора) m.dir *= -1;
   }
 
   m.setVelocityX(m.speed * m.dir);
