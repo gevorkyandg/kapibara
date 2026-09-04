@@ -9,9 +9,11 @@ import {
   SLOPE_STEPS,
   HIVE,
   RANDOM_POOL,
+  DEBUG,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
+import { createCoordRuler } from '../coords.js';
 import { createCapybara } from '../capybara.js';
 import { MONSTERS } from '../monsters.js';
 import {
@@ -170,6 +172,9 @@ export class GameScene extends Phaser.Scene {
     // Мёртвая зона: пока капибара прыгает в её пределах, камера стоит.
     // Без этого на высоком этапе кадр дёргался бы от каждого прыжка.
     this.cameras.main.setDeadzone(200, 240);
+
+    // Линейка координат — инструмент для разговора о карте (DEBUG.coords).
+    this.ruler = DEBUG.coords ? createCoordRuler(this) : null;
     this.cameras.main.fadeIn(250);
 
     platform.gameplayStart();
@@ -980,6 +985,7 @@ export class GameScene extends Phaser.Scene {
       this.auraRings.forEach((r) => r.setPosition(this.player.x, this.player.y));
     }
     this.updateAbilityIcons(time);
+    this.ruler?.обновить();
 
     // Пересекла финишную черту — этап пройден, где бы она ни была по высоте.
     if (this.finishX != null && this.player.x >= this.finishX) {
