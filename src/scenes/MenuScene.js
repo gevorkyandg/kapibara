@@ -312,6 +312,10 @@ export class MenuScene extends Phaser.Scene {
       })
     );
 
+    // Кнопки внутри контейнера должны и попадания считать по экрану, а не
+    // по миру (третий аргумент — «и детям тоже»).
+    box.setScrollFactor(0, 0, true);
+
     this.confirmBox = box;
   }
 
