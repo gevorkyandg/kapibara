@@ -341,6 +341,7 @@ export class GameScene extends Phaser.Scene {
     m.dir = Math.random() < 0.5 ? -1 : 1;
     m.nextHopAt = 0;
     m.homeY = y;
+    m.state = 'hover';
 
     const b = type.body;
     m.body.setSize(b.w, b.h).setOffset(b.ox, b.oy);
@@ -349,9 +350,19 @@ export class GameScene extends Phaser.Scene {
     // Летуны без своего поведения просто покачиваются по заданным осям.
     if (type.float) {
       if (type.float.y) {
+        // Вниз опускаемся настолько, насколько есть место: иначе пчела с
+        // широким размахом уходила бы прямо в землю.
+        let глубина = type.float.y;
+        for (let d = 20; d <= type.float.y; d += 10) {
+          if (this.isSolidAtPixel(x, y + d + 26)) {
+            глубина = Math.max(0, d - 10);
+            break;
+          }
+        }
+
         this.tweens.add({
           targets: m,
-          y: y + type.float.y,
+          y: y + глубина,
           duration: type.float.ms,
           yoyo: true,
           repeat: -1,
@@ -1700,6 +1711,40 @@ export class GameScene extends Phaser.Scene {
           .setScale(0.72)
           .setOrigin(1, 0.5)
       );
+    }
+  }
+
+  /**
+   * Звёздочки над оглушённым монстром — их видно, пока он лежит.
+   * Кружатся над головой и гаснут вместе с оглушением.
+   */
+  spinDizzyStars(m, durationMs) {
+    const звёзд = 5;
+    for (let i = 0; i < звёзд; i++) {
+      const star = this.add.image(m.x, m.y - 34, 'star-dizzy').setDepth(6).setScale(0.9);
+      const фаза = (i / звёзд) * Math.PI * 2;
+
+      // Крутим вручную, потому что оса под нами ещё и лежит не на месте.
+      const событие = this.time.addEvent({
+        delay: 16,
+        loop: true,
+        callback: () => {
+          const угол = фаза + this.time.now / 260;
+          star.x = m.x + Math.cos(угол) * 26;
+          star.y = m.y - 32 + Math.sin(угол) * 9;
+          star.setScale(0.7 + Math.sin(угол) * 0.25);
+        },
+      });
+
+      this.time.delayedCall(durationMs, () => {
+        событие.remove();
+        this.tweens.add({
+          targets: star,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => star.destroy(),
+        });
+      });
     }
   }
 

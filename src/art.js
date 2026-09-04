@@ -369,6 +369,75 @@ export function createTextures(scene) {
   smile(18, 33, 5);
   bake(g, 'wasp', 58, 46);
 
+  // Оса в атаке: крылья прижаты, жало выставлено вперёд. Картинка рисуется
+  // жалом вправо, а в игре поворачивается по направлению удара — так жало
+  // всегда смотрит на капибару.
+  g.fillStyle(0xdff3ff, 0.8);
+  g.lineStyle(3, 0x8fb8cc, 1);
+  g.fillEllipse(14, 12, 26, 11); // крылья отброшены назад
+  g.strokeEllipse(14, 12, 26, 11);
+  g.fillEllipse(12, 32, 24, 10);
+  g.strokeEllipse(12, 32, 24, 10);
+  g.fillStyle(0xd8a318, 1);
+  g.lineStyle(4, 0x5e4408, 1);
+  g.fillEllipse(30, 22, 42, 26); // вытянутое тело
+  g.strokeEllipse(30, 22, 42, 26);
+  g.fillStyle(0x3a2a06, 1);
+  g.fillRect(24, 11, 7, 22);
+  g.fillRect(35, 14, 6, 16);
+  g.fillPoints(
+    [
+      { x: 50, y: 16 },
+      { x: 72, y: 22 },
+      { x: 50, y: 28 },
+    ],
+    true
+  ); // длинное жало вперёд
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(18, 19, 5);
+  g.fillStyle(0x2f2016, 1);
+  g.fillCircle(19, 20, 2.6);
+  g.lineStyle(3, 0x3a2a06, 1);
+  g.lineBetween(11, 12, 22, 16); // сдвинутая бровь — она злится
+  bake(g, 'wasp-dive', 76, 46);
+
+  // Оса, потерявшая сознание: лежит на спине, лапки кверху, глаза косые,
+  // язык наружу.
+  g.fillStyle(0xdff3ff, 0.75);
+  g.lineStyle(3, 0x8fb8cc, 1);
+  g.fillEllipse(24, 20, 26, 12); // смятые крылья
+  g.strokeEllipse(24, 20, 26, 12);
+  g.fillStyle(0xd8a318, 1);
+  g.lineStyle(4, 0x5e4408, 1);
+  g.fillEllipse(32, 34, 46, 24); // тело лежит
+  g.strokeEllipse(32, 34, 46, 24);
+  g.fillStyle(0x3a2a06, 1);
+  g.fillRect(30, 24, 7, 20);
+  g.fillRect(41, 26, 6, 16);
+  g.lineStyle(3, 0x3a2a06, 1);
+  [16, 26, 36].forEach((x) => g.lineBetween(x, 24, x - 4, 14)); // лапки кверху
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(16, 32, 6);
+  g.fillCircle(27, 31, 6);
+  g.lineStyle(3, 0x2f2016, 1);
+  // Косые глаза-крестики
+  g.lineBetween(13, 29, 19, 35);
+  g.lineBetween(19, 29, 13, 35);
+  g.lineBetween(24, 28, 30, 34);
+  g.lineBetween(30, 28, 24, 34);
+  g.fillStyle(0xf48fb1, 1);
+  g.lineStyle(3, 0xc2506a, 1);
+  g.fillRoundedRect(6, 36, 14, 8, 4); // высунутый язык
+  g.strokeRoundedRect(6, 36, 14, 8, 4);
+  bake(g, 'wasp-stunned', 62, 50);
+
+  // Звёздочка над головой оглушённого — их кружится несколько
+  g.fillStyle(0xffffff, 1);
+  g.lineStyle(2, 0xd9e6f2, 1);
+  g.fillPoints(starPoints(9, 9, 8, 3.4), true);
+  g.strokePoints(starPoints(9, 9, 8, 3.4), true);
+  bake(g, 'star-dizzy', 18, 18);
+
   // Жаба: больше и темнее лягушки, стреляет языком.
   g.fillStyle(0x4f8a45, 1);
   g.lineStyle(4, 0x2c5427, 1);

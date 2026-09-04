@@ -100,8 +100,9 @@ export const MONSTERS = {
     stompable: true,
     ground: false,
     body: { w: 40, h: 30, ox: 8, oy: 12 },
-    // Размах на 30% шире, а времени на него меньше — выходит заметно резвее.
-    float: { x: 156, y: 195, ms: 1460 },
+    // Размах шире и вниз она уходит заметно глубже, чтобы доставать бегущего
+    // по земле игрока, а не висеть недосягаемой.
+    float: { x: 156, y: 300, ms: 1460 },
   },
 
   // ── Сложные ────────────────────────────────────────────────────────────
@@ -134,64 +135,118 @@ export const MONSTERS = {
   },
 
   w: {
-    // Оса. Летает, а увидев капибару, бьёт по диагонали. Промахнулась и
-    // ударилась о землю — лежит оглушённая две секунды (ТЗ).
+    /**
+     * Оса. Самый расчётливый монстр в игре.
+     *
+     * Она не бросается, когда капибара просто оказалась рядом, — она считает
+     * упреждение: где герой будет к моменту удара, если продолжит бежать так
+     * же. И начинает атаку заранее, чтобы прилететь именно туда. Поэтому
+     * бегущего игрока оса достаёт, а тот, кто включил ускорение, проскакивает
+     * под ней: к моменту удара он уже дальше, чем оса рассчитала.
+     *
+     * Промахнулась и врезалась в землю — лежит оглушённая две секунды, над
+     * головой кружатся звёздочки. После подъёма ещё две секунды не нападает.
+     */
     key: 'wasp',
+    diveKey: 'wasp-dive',
+    stunKey: 'wasp-stunned',
     xp: XP.monster.hard,
     stompable: true,
     ground: false,
     body: { w: 40, h: 30, ox: 9, oy: 12 },
-    float: { y: 110, ms: 1600 },
-    sight: 320,
+    sight: 460, // замечает издалека, чтобы успеть рассчитать удар
+    diveSpeed: 430,
+    diveAngle: 45, // градусы; можно калибровать, лишь бы доставала
+    aimTolerance: 46, // допуск расчёта, иначе идеальный момент не поймать
+    hoverAmp: 40, // насколько качается на месте
+    hoverMs: 1300,
+    warnMs: 400, // столько целится перед броском
     attackEvery: 2600,
-    warnMs: 500,
+    stunMs: 2000,
+    calmAfterRiseMs: 2000, // после подъёма не атакует
     update(scene, m, time) {
-      const player = scene.player;
+      const игрок = scene.player;
 
-      if (m.stunnedUntil) {
-        // Лежит оглушённая, потом взлетает обратно
-        if (time < m.stunnedUntil) return;
-        m.stunnedUntil = 0;
+      // ── Лежит оглушённая ────────────────────────────────────────────────
+      if (m.state === 'stun') {
+        if (time < m.stunUntil) return;
+        m.state = 'rise';
+        m.setTexture(m.type.key).setAngle(0).setFlipY(false);
+        m.readyAt = time + m.calmAfterRiseMs;
+        scene.tweens.add({
+          targets: m,
+          y: m.homeY,
+          duration: 600,
+          ease: 'Sine.easeOut',
+          onComplete: () => {
+            m.state = 'hover';
+          },
+        });
+        return;
+      }
+
+      // ── Пикирует ────────────────────────────────────────────────────────
+      if (m.state === 'dive') {
+        const врезалась =
+          scene.isSolidAtPixel(m.x, m.body.bottom + 6) || m.y > scene.worldH - 40;
+        if (!врезалась) return;
+
+        m.state = 'stun';
+        m.stunUntil = time + m.stunMs;
         m.setVelocity(0, 0);
-        scene.tweens.add({ targets: m, y: m.homeY, duration: 500, ease: 'Sine.easeOut' });
-        m.readyAt = time + 1000; // секунду после подъёма не атакует
+        m.setTexture(m.type.stunKey).setAngle(0).setFlipY(false);
+        scene.puff(m.x, m.y, 0xffe08a);
+        scene.spinDizzyStars(m, m.stunMs);
         return;
       }
 
-      if (m.diving) {
-        // В полёте: удар о землю — оглушение. Летуны с землёй не сталкиваются,
-        // поэтому смотрим прямо в карту.
-        if (scene.isSolidAtPixel(m.x, m.body.bottom + 6) || m.y > scene.worldH - 40) {
-          m.diving = false;
-          m.stunnedUntil = time + 2000;
-          m.setVelocity(0, 0);
-          scene.puff(m.x, m.y, 0xffe08a);
-        }
+      // ── Взлетает обратно ────────────────────────────────────────────────
+      if (m.state === 'rise') return;
+
+      // ── Целится ─────────────────────────────────────────────────────────
+      if (m.state === 'aim') {
+        if (time < m.aimUntil) return;
+
+        m.state = 'dive';
+        m.readyAt = time + m.attackEvery;
+
+        const рад = Phaser.Math.DegToRad(m.diveAngle);
+        const vx = Math.cos(рад) * m.diveSpeed * m.aimDir;
+        const vy = Math.sin(рад) * m.diveSpeed;
+        m.setVelocity(vx, vy);
+
+        // Жало смотрит туда же, куда летит оса.
+        m.setTexture(m.type.diveKey);
+        m.setFlipY(m.aimDir < 0);
+        m.setRotation(Math.atan2(vy, vx));
         return;
       }
+
+      // ── Парит и считает упреждение ──────────────────────────────────────
+      m.y = m.homeY + Math.sin(time / m.hoverMs) * m.hoverAmp;
 
       if (time < (m.readyAt || 0)) return;
+      if (Math.abs(игрок.x - m.x) > m.sight) return;
 
-      const dist = Phaser.Math.Distance.Between(m.x, m.y, player.x, player.y);
-      if (dist > m.sight) return;
+      const глубина = игрок.body.bottom - m.y; // насколько ниже нас капибара
+      if (глубина < 60) return; // она выше — бить некуда
 
-      if (!m.aiming) {
-        // Полсекундная задержка перед нападением (ТЗ)
-        m.aiming = true;
-        m.aimUntil = time + m.warnMs;
-        scene.tweens.add({ targets: m, scaleX: 1.2, scaleY: 0.85, duration: m.warnMs, yoyo: true });
-        return;
-      }
-      if (time < m.aimUntil) return;
+      const рад = Phaser.Math.DegToRad(m.diveAngle);
+      const время = глубина / (Math.sin(рад) * m.diveSpeed); // сколько лететь вниз
+      const охват = Math.cos(рад) * m.diveSpeed * время; // на столько сместимся вбок
 
-      // Удар под 45 градусов в сторону игрока
-      m.aiming = false;
-      m.diving = true;
-      m.readyAt = time + m.attackEvery;
-      const dir = player.x < m.x ? -1 : 1;
-      // Ровно 45 градусов: одинаковая скорость по обеим осям и без
-      // гравитации, иначе удар превращается в отвесное падение.
-      m.setVelocity(dir * 408, 408); // на 20% быстрее прежнего
+      // Где капибара окажется к удару, если продолжит бежать как сейчас.
+      const прогноз = игрок.x + игрок.body.velocity.x * (m.warnMs / 1000 + время);
+      const нужно = прогноз - m.x;
+
+      // Момент настал, когда нужное смещение совпало с тем, что оса пролетит.
+      if (Math.abs(Math.abs(нужно) - охват) > m.aimTolerance) return;
+
+      m.state = 'aim';
+      m.aimUntil = time + m.warnMs;
+      m.aimDir = Math.sign(нужно) || 1;
+      m.setFlipX(m.aimDir < 0);
+      scene.tweens.add({ targets: m, scaleX: 1.2, scaleY: 0.85, duration: m.warnMs, yoyo: true });
     },
   },
 
