@@ -59,6 +59,9 @@ const TREATS = [
 // прежними пружина ощущалась вязкой.
 const SPRING_WINDOW = 208;
 const SPRING_BUFFER = 104;
+
+// Сколько пружина не ловит после выстрела.
+const SPRING_REST = 420;
 // Высота одной ступеньки склона. Чем их больше в клетке, тем мельче шаг и
 // тем ровнее выглядит скат.
 const SLOPE_STEP = TILE / SLOPE_STEPS;
@@ -321,14 +324,17 @@ export class GameScene extends Phaser.Scene {
             // физическое тело, спираль — отдельная картинка поверх: сжимается
             // только она, а подставка стоит на месте.
             const пол = top + TILE;
-            const spring = this.springs.create(cx, пол, 'spring-base').setOrigin(0.5, 1);
-            spring.setDepth(2);
-            spring.body.setSize(50, 44).setOffset(5, -42);
-            spring.refreshBody();
-            spring.coil = this.add
-              .image(cx, пол - 16, 'spring-coil')
-              .setOrigin(0.5, 1)
-              .setDepth(2);
+            this.add.image(cx, пол, 'spring-base').setOrigin(0.5, 1).setDepth(2);
+            const coil = this.add.image(cx, пол - 16, 'spring-coil').setOrigin(0.5, 1).setDepth(2);
+
+            // Ловчая зона — отдельный невидимый прямоугольник, а не сама
+            // картинка: статическому телу Phaser пересчитывает размер из
+            // картинки и затирает заданный вручную, отчего зона съёживалась
+            // до подставки и пружина ловила только у самой земли.
+            const spring = this.add.rectangle(cx, пол - 36, 50, 44);
+            this.physics.add.existing(spring, true);
+            this.springs.add(spring);
+            spring.coil = coil;
             break;
           }
 
@@ -1529,13 +1535,14 @@ export class GameScene extends Phaser.Scene {
 
   touchSpring(spring) {
     if (!spring.active || this.finished || this.springHold) return;
+    if (this.time.now < (spring.readyAt || 0)) return;
     const body = this.player.body;
 
     // Пружина ловит только того, кто на неё падает. Пройти мимо по земле или
     // задеть боком нельзя: иначе она срабатывает сама по себе, а игрок этого
     // не просил.
     if (body.velocity.y < 60) return;
-    if (body.bottom > spring.body.top + 16) return;
+    if (body.bottom > spring.body.top + 34) return;
 
     // Ставим капибару ровно на пружину: сдвигаем ровно на столько, на
     // сколько ноги провалились ниже её верха. Иначе она оседала до земли.
@@ -1583,6 +1590,10 @@ export class GameScene extends Phaser.Scene {
     if (hold.spring.active) {
       this.tweens.add({ targets: hold.spring.coil, scaleY: 1, duration: 128, ease: 'Back.Out' });
     }
+    // Пружина отдыхает: за это время капибара успевает оттолкнуться и уйти,
+    // а не быть пойманной снова тем же кадром.
+    if (hold.spring.active) hold.spring.readyAt = time + SPRING_REST;
+
     // Нажал вовремя — двойная высота, не нажал — мягкий подскок.
     this.launch(hold.charged ? SPRING_CHARGED : SPRING_IDLE);
     if (hold.charged) this.puff(this.player.x, this.player.y + 24, 0xd8dee6);
