@@ -10,6 +10,7 @@ import {
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCapybara } from '../capybara.js';
+import { MONSTERS } from '../monsters.js';
 import {
   getSave,
   addCoins,
@@ -160,6 +161,8 @@ export class GameScene extends Phaser.Scene {
     this.cloudlets = this.physics.add.staticGroup(); // облачка
     this.fallers = this.physics.add.staticGroup(); // падающие платформы
     this.movers = this.physics.add.group(); // движущиеся платформы
+    this.quills = this.physics.add.group(); // иглы дикобраза
+    this.tongues = this.physics.add.group(); // языки жаб
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
@@ -195,28 +198,11 @@ export class GameScene extends Phaser.Scene {
             break;
           }
 
-          case 'm': {
-            const w = this.walkers.create(cx, cy, 'walker');
-            w.setDepth(3);
-            w.body.setSize(44, 40).setOffset(6, 12);
-            w.dir = Math.random() < 0.5 ? -1 : 1;
+          case 'z':
+            // Нора видна заранее — по ТЗ её всегда должно быть заметно.
+            this.add.image(cx, top + TILE - 14, 'burrow').setDepth(1);
+            this.addMonster(ch, cx, cy);
             break;
-          }
-
-          case 'b': {
-            const b = this.flyers.create(cx, cy, 'bee');
-            b.setDepth(3);
-            b.body.setSize(40, 30).setOffset(8, 12);
-            this.tweens.add({
-              targets: b,
-              y: cy + 150,
-              duration: 1900,
-              yoyo: true,
-              repeat: -1,
-              ease: 'Sine.easeInOut',
-            });
-            break;
-          }
 
           case '~': {
             // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).
@@ -291,8 +277,19 @@ export class GameScene extends Phaser.Scene {
             break;
           }
 
+          case '!':
+            // Табличка перед длинной пропастью (ТЗ): предупреждает, что
+            // дальше без разгона или способности не перепрыгнуть.
+            this.add.image(cx, top + TILE - 31, 'sign').setDepth(1);
+            break;
+
           case 'P':
             this.startPos = { x: cx, y: cy };
+            break;
+
+          default:
+            // Всё остальное — монстры из monsters.js
+            if (MONSTERS[ch]) this.addMonster(ch, cx, cy);
             break;
 
           case 'F': {
@@ -312,6 +309,70 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /**
+   * Создать монстра по символу карты. Всё, чем они отличаются, описано
+   * в monsters.js — здесь только общая сборка.
+   */
+  addMonster(symbol, x, y) {
+    const type = MONSTERS[symbol];
+    const group = type.ground ? this.walkers : this.flyers;
+    const m = group.create(x, y, type.key).setDepth(3);
+
+    m.kind = symbol;
+    m.type = type;
+    m.xpValue = type.xp;
+    m.stompable = type.stompable;
+    m.speed = type.speed ?? 0;
+    m.hopPower = type.hopPower ?? 0;
+    m.hopEvery = type.hopEvery ?? 0;
+    m.sight = type.sight ?? 0;
+    m.shootEvery = type.shootEvery ?? 0;
+    m.warnMs = type.warnMs ?? 0;
+    m.tongueEvery = type.tongueEvery ?? 0;
+    m.outMs = type.outMs ?? 0;
+    m.hideMs = type.hideMs ?? 0;
+    m.dir = Math.random() < 0.5 ? -1 : 1;
+    m.nextHopAt = 0;
+    m.homeY = y;
+
+    const b = type.body;
+    m.body.setSize(b.w, b.h).setOffset(b.ox, b.oy);
+    if (!type.ground) m.body.setAllowGravity(false);
+
+    // Летуны без своего поведения просто покачиваются по заданным осям.
+    if (type.float) {
+      if (type.float.y) {
+        this.tweens.add({
+          targets: m,
+          y: y + type.float.y,
+          duration: type.float.ms,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+      if (type.float.x) {
+        this.tweens.add({
+          targets: m,
+          x: x + type.float.x,
+          duration: type.float.ms * 1.4,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+    }
+
+    // Змея сидит в норе и вылезает, только когда игрок подойдёт.
+    if (symbol === 'z') {
+      m.y = y + 46;
+      m.setAlpha(0);
+      m.body.enable = false;
+    }
+
+    return m;
   }
 
   addCoin(x, y) {
@@ -382,6 +443,8 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(this.player, this.coins, (_p, coin) => this.collectCoin(coin));
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
+    this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now));
+    this.physics.add.overlap(this.player, this.tongues, () => this.hurt(this.time.now));
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
     // Платформы, по которым можно ходить
@@ -763,7 +826,7 @@ export class GameScene extends Phaser.Scene {
 
     this.updateSpring(time);
     this.handleMovement(time, onFloor);
-    this.updateWalkers();
+    this.updateMonsters(time);
     this.rideMovers();
     this.updateHazards();
     this.updateCapyVisual(time, onFloor);
@@ -960,21 +1023,39 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1500, () => pebble.active && pebble.destroy());
   }
 
-  updateWalkers() {
-    this.walkers.children.iterate((w) => {
-      if (!w || !w.active) return;
-      if (w.body.blocked.left) w.dir = 1;
-      else if (w.body.blocked.right) w.dir = -1;
+  /** Каждый монстр живёт по своему правилу из monsters.js. */
+  updateMonsters(time) {
+    const шаг = (m) => {
+      if (!m || !m.active || !m.type) return;
+      m.type.update?.(this, m, time);
+    };
+    this.walkers.children.iterate(шаг);
+    this.flyers.children.iterate(шаг);
+  }
 
-      // У края платформы монстрик разворачивается, а не падает.
-      if (w.body.blocked.down) {
-        const aheadX = w.x + w.dir * 30;
-        if (!this.isSolidAtPixel(aheadX, w.body.bottom + 10)) w.dir *= -1;
-      }
+  /** Дикобраз выпускает иглы во все стороны (ТЗ). */
+  shootQuills(m) {
+    sfx.pop();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const quill = this.quills.create(m.x + Math.cos(a) * 30, m.y + Math.sin(a) * 30, 'quill');
+      quill.setDepth(3).setRotation(a);
+      quill.body.setAllowGravity(false);
+      quill.body.setSize(14, 10);
+      quill.setVelocity(Math.cos(a) * 260, Math.sin(a) * 260);
+      this.time.delayedCall(900, () => quill.active && quill.destroy());
+    }
+  }
 
-      w.setVelocityX(60 * w.dir);
-      w.setFlipX(w.dir < 0);
-    });
+  /** Жаба выстреливает языком: коснулся языка — потерял жизнь (ТЗ). */
+  shootTongue(m, dir) {
+    const tongue = this.tongues.create(m.x + dir * 30, m.y + 6, 'tongue');
+    tongue.setDepth(3).setFlipX(dir < 0);
+    tongue.body.setAllowGravity(false);
+    tongue.setVelocityX(dir * 330);
+    sfx.pop();
+    this.time.delayedCall(220, () => tongue.active && tongue.setVelocityX(-dir * 330));
+    this.time.delayedCall(470, () => tongue.active && tongue.destroy());
   }
 
   /**
@@ -1104,8 +1185,11 @@ export class GameScene extends Phaser.Scene {
     const time = this.time.now;
 
     // Прыжок сверху — монстрик исчезает с хлопком, капибара отскакивает.
+    // Колючих (ёжик, дикобраз) и змею топтать нельзя — только рогаткой.
     const fallingOnto =
-      this.player.body.velocity.y > 60 && this.player.body.bottom < enemy.body.top + 26;
+      enemy.stompable !== false &&
+      this.player.body.velocity.y > 60 &&
+      this.player.body.bottom < enemy.body.top + 26;
 
     if (fallingOnto) {
       this.player.setVelocityY(PHYS.bounceOnEnemy);
@@ -1287,8 +1371,8 @@ export class GameScene extends Phaser.Scene {
   neutralize(enemy) {
     enemy.disableBody(true, true);
     this.monstersDown += 1;
-    this.monsterXp += XP.monster.easy;
-    addXp(XP.monster.easy);
+    this.monsterXp += enemy.xpValue ?? XP.monster.easy;
+    addXp(enemy.xpValue ?? XP.monster.easy);
     this.checkLevelUp();
     sfx.pop();
     this.puff(enemy.x, enemy.y, 0x8ed081);

@@ -10,6 +10,7 @@
  * монстр прыжком.
  */
 
+import Phaser from 'phaser';
 import { XP } from './progression.js';
 
 /** Идёт по земле, разворачивается у стены и у края площадки. */
@@ -149,7 +150,6 @@ export const MONSTERS = {
         // Лежит оглушённая, потом взлетает обратно
         if (time < m.stunnedUntil) return;
         m.stunnedUntil = 0;
-        m.body.setAllowGravity(false);
         m.setVelocity(0, 0);
         scene.tweens.add({ targets: m, y: m.homeY, duration: 500, ease: 'Sine.easeOut' });
         m.readyAt = time + 1000; // секунду после подъёма не атакует
@@ -157,12 +157,12 @@ export const MONSTERS = {
       }
 
       if (m.diving) {
-        // В полёте: удар о землю — оглушение
-        if (m.body.blocked.down || m.body.blocked.left || m.body.blocked.right) {
+        // В полёте: удар о землю — оглушение. Летуны с землёй не сталкиваются,
+        // поэтому смотрим прямо в карту.
+        if (scene.isSolidAtPixel(m.x, m.body.bottom + 6) || m.y > scene.worldH - 40) {
           m.diving = false;
           m.stunnedUntil = time + 2000;
           m.setVelocity(0, 0);
-          m.body.setAllowGravity(false);
           scene.puff(m.x, m.y, 0xffe08a);
         }
         return;
@@ -187,8 +187,9 @@ export const MONSTERS = {
       m.diving = true;
       m.readyAt = time + m.attackEvery;
       const dir = player.x < m.x ? -1 : 1;
-      m.body.setAllowGravity(true);
-      m.setVelocity(dir * 320, 320);
+      // Ровно 45 градусов: одинаковая скорость по обеим осям и без
+      // гравитации, иначе удар превращается в отвесное падение.
+      m.setVelocity(dir * 340, 340);
     },
   },
 
