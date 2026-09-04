@@ -200,6 +200,214 @@ export function createTextures(scene) {
   g.fillCircle(27, 12, 3);
   bake(g, 'treat-icecream', 48, 48);
 
+  // ── Монстры (ТЗ) ────────────────────────────────────────────────────────
+  // Все нестрашные: круглые формы, большие глаза, улыбки. Сложность читается
+  // не злобой, а формой — у кого шипы, тот и опасен.
+
+  /** Пара больших глаз с бликами — общая часть почти всех монстров. */
+  const eyes = (x1, x2, y, r, pupil = 0x2f2016) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(x1, y, r);
+    g.fillCircle(x2, y, r);
+    g.fillStyle(pupil, 1);
+    g.fillCircle(x1 + 1, y + 1, r * 0.5);
+    g.fillCircle(x2 + 1, y + 1, r * 0.5);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(x1 + 2, y - 2, r * 0.22);
+    g.fillCircle(x2 + 2, y - 2, r * 0.22);
+  };
+
+  const smile = (cx, cy, r, color = 0x2f2016) => {
+    g.lineStyle(3, color, 1);
+    g.beginPath();
+    g.arc(cx, cy, r, 0.1 * Math.PI, 0.9 * Math.PI);
+    g.strokePath();
+  };
+
+  // Черепашка: панцирь и добрая мордочка. Топчется прыжком.
+  g.fillStyle(0x8ed081, 1);
+  g.lineStyle(4, 0x3f7a3a, 1);
+  g.fillEllipse(20, 34, 22, 18); // голова
+  g.strokeEllipse(20, 34, 22, 18);
+  g.fillEllipse(14, 48, 14, 8); // лапки
+  g.strokeEllipse(14, 48, 14, 8);
+  g.fillEllipse(44, 48, 14, 8);
+  g.strokeEllipse(44, 48, 14, 8);
+  g.fillStyle(0x9c6236, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.beginPath();
+  g.arc(36, 34, 22, Math.PI, 0); // панцирь
+  g.fillPath();
+  g.strokePath();
+  g.fillStyle(0xbf8146, 1);
+  g.fillCircle(30, 26, 5);
+  g.fillCircle(44, 28, 5);
+  eyes(15, 25, 30, 5);
+  smile(20, 37, 4);
+  bake(g, 'turtle', 60, 56);
+
+  // Муха: тёмное тельце и большие крылья. Летает вверх-вниз.
+  g.fillStyle(0xdff3ff, 0.85);
+  g.lineStyle(3, 0x8fb8cc, 1);
+  g.fillEllipse(14, 12, 22, 14);
+  g.strokeEllipse(14, 12, 22, 14);
+  g.fillEllipse(38, 12, 22, 14);
+  g.strokeEllipse(38, 12, 22, 14);
+  g.fillStyle(0x5b6b7a, 1);
+  g.lineStyle(4, 0x2f3a45, 1);
+  g.fillEllipse(26, 28, 34, 26);
+  g.strokeEllipse(26, 28, 34, 26);
+  eyes(20, 33, 24, 7);
+  smile(26, 34, 5);
+  bake(g, 'fly', 54, 46);
+
+  // Лягушка: прыгает с места на место, топчется прыжком.
+  g.fillStyle(0x6fc25f, 1);
+  g.lineStyle(4, 0x3f7a3a, 1);
+  g.fillEllipse(28, 34, 48, 32); // тело
+  g.strokeEllipse(28, 34, 48, 32);
+  g.fillEllipse(10, 46, 16, 10); // лапки
+  g.strokeEllipse(10, 46, 16, 10);
+  g.fillEllipse(46, 46, 16, 10);
+  g.strokeEllipse(46, 46, 16, 10);
+  g.fillStyle(0x6fc25f, 1);
+  g.fillCircle(18, 16, 10); // глазные бугорки
+  g.strokeCircle(18, 16, 10);
+  g.fillCircle(38, 16, 10);
+  g.strokeCircle(38, 16, 10);
+  eyes(18, 38, 15, 6);
+  smile(28, 34, 9);
+  bake(g, 'frog', 60, 56);
+
+  // Ёжик: колючая спина — прыгать на него нельзя, и это видно.
+  g.fillStyle(0x6b4a33, 1);
+  g.lineStyle(4, 0x3d2a1c, 1);
+  for (let i = 0; i < 7; i++) {
+    const x = 10 + i * 7;
+    g.fillPoints(
+      [
+        { x, y: 30 },
+        { x: x + 4, y: 6 + (i % 2) * 4 },
+        { x: x + 9, y: 30 },
+      ],
+      true
+    );
+  }
+  g.fillStyle(0xc9a06b, 1);
+  g.fillEllipse(30, 36, 54, 26); // тело
+  g.strokeEllipse(30, 36, 54, 26);
+  g.fillStyle(0x8d6b4b, 1);
+  g.fillEllipse(50, 36, 20, 16); // мордочка
+  g.fillStyle(0x2f2016, 1);
+  g.fillCircle(58, 34, 3); // носик
+  eyes(44, 52, 32, 4);
+  bake(g, 'hedgehog', 66, 50);
+
+  // Дикобраз: тот же принцип, но иглы во все стороны — он ими и стреляет.
+  g.fillStyle(0x5a4636, 1);
+  g.lineStyle(3, 0x2f2016, 1);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    g.lineBetween(34 + Math.cos(a) * 20, 34 + Math.sin(a) * 20, 34 + Math.cos(a) * 32, 34 + Math.sin(a) * 32);
+  }
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x3d2a1c, 1);
+  g.fillCircle(34, 34, 22);
+  g.strokeCircle(34, 34, 22);
+  eyes(27, 41, 30, 6);
+  smile(34, 40, 6);
+  bake(g, 'porcupine', 68, 68);
+
+  // Игла дикобраза
+  g.fillStyle(0x5a4636, 1);
+  g.lineStyle(2, 0x2f2016, 1);
+  g.fillPoints([{ x: 2, y: 5 }, { x: 16, y: 8 }, { x: 2, y: 11 }], true);
+  g.strokePoints([{ x: 2, y: 5 }, { x: 16, y: 8 }, { x: 2, y: 11 }], true);
+  bake(g, 'quill', 18, 16);
+
+  // Оса: темнее пчелы, брови строгие (ТЗ), улыбка на месте.
+  g.fillStyle(0xdff3ff, 0.85);
+  g.lineStyle(3, 0x8fb8cc, 1);
+  g.fillEllipse(18, 10, 20, 14);
+  g.strokeEllipse(18, 10, 20, 14);
+  g.fillEllipse(38, 10, 20, 14);
+  g.strokeEllipse(38, 10, 20, 14);
+  g.fillStyle(0xd8a318, 1);
+  g.lineStyle(4, 0x5e4408, 1);
+  g.fillEllipse(28, 28, 40, 30);
+  g.strokeEllipse(28, 28, 40, 30);
+  g.fillStyle(0x3a2a06, 1);
+  g.fillRect(26, 16, 7, 25);
+  g.fillRect(37, 19, 6, 19);
+  g.fillPoints([{ x: 48, y: 26 }, { x: 56, y: 30 }, { x: 48, y: 32 }], true); // жало
+  eyes(14, 22, 25, 5);
+  g.lineStyle(3, 0x3a2a06, 1);
+  g.lineBetween(9, 17, 18, 20); // строгие брови
+  g.lineBetween(27, 20, 18, 17);
+  smile(18, 33, 5);
+  bake(g, 'wasp', 58, 46);
+
+  // Жаба: больше и темнее лягушки, стреляет языком.
+  g.fillStyle(0x4f8a45, 1);
+  g.lineStyle(4, 0x2c5427, 1);
+  g.fillEllipse(34, 40, 60, 40);
+  g.strokeEllipse(34, 40, 60, 40);
+  g.fillEllipse(12, 56, 20, 12);
+  g.strokeEllipse(12, 56, 20, 12);
+  g.fillEllipse(56, 56, 20, 12);
+  g.strokeEllipse(56, 56, 20, 12);
+  g.fillStyle(0x4f8a45, 1);
+  g.fillCircle(22, 18, 12);
+  g.strokeCircle(22, 18, 12);
+  g.fillCircle(46, 18, 12);
+  g.strokeCircle(46, 18, 12);
+  eyes(22, 46, 17, 7);
+  smile(34, 40, 12);
+  bake(g, 'toad', 72, 66);
+
+  // Язык жабы — растягивается по горизонтали
+  g.fillStyle(0xf48fb1, 1);
+  g.lineStyle(3, 0xc2506a, 1);
+  g.fillRoundedRect(0, 2, 24, 12, 6);
+  g.strokeRoundedRect(0, 2, 24, 12, 6);
+  bake(g, 'tongue', 24, 16);
+
+  // Змея: выглядывает из норы, прыгать на неё нельзя — кусает в полёте.
+  g.fillStyle(0x7bb356, 1);
+  g.lineStyle(4, 0x3f6b2a, 1);
+  g.fillEllipse(26, 44, 30, 30);
+  g.strokeEllipse(26, 44, 30, 30);
+  g.fillEllipse(30, 20, 34, 26); // голова
+  g.strokeEllipse(30, 20, 34, 26);
+  eyes(24, 38, 16, 5);
+  g.fillStyle(0xe0454f, 1);
+  g.fillPoints([{ x: 44, y: 26 }, { x: 56, y: 24 }, { x: 44, y: 30 }], true); // язычок
+  bake(g, 'snake', 60, 60);
+
+  // Нора: яма, прикрытая соломой (ТЗ) — её видно заранее
+  g.fillStyle(0x3d2a1c, 1);
+  g.fillEllipse(30, 16, 56, 22);
+  g.fillStyle(0xd9b96a, 1);
+  g.lineStyle(3, 0xa88a3e, 1);
+  for (let i = 0; i < 6; i++) {
+    g.lineBetween(6 + i * 9, 10 + (i % 2) * 4, 16 + i * 9, 20 - (i % 2) * 4);
+  }
+  bake(g, 'burrow', 60, 28);
+
+  // Табличка-предупреждение перед длинной пропастью (ТЗ)
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(20, 30, 8, 30, 3);
+  g.strokeRoundedRect(20, 30, 8, 30, 3);
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(4, 0xc9922a, 1);
+  g.fillRoundedRect(2, 2, 44, 32, 8);
+  g.strokeRoundedRect(2, 2, 44, 32, 8);
+  g.fillStyle(0x5a3a22, 1);
+  g.fillRoundedRect(21, 8, 6, 15, 3);
+  g.fillCircle(24, 28, 3.4);
+  bake(g, 'sign', 48, 62);
+
   // Ходячий монстрик: круглый и улыбчивый — «нестрашный».
   g.fillStyle(0x8ed081, 1);
   g.lineStyle(4, 0x3f7a3a, 1);
