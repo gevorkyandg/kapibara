@@ -95,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     this.levelData = level;
     this.themeIndex = level.theme;
 
+    this.finishX = null; // сцена переиспользуется, старая черта не должна остаться
     this.map = buildLevelMap(this.levelIndex);
     this.cols = this.map[0].length;
     this.rows = this.map.length;
@@ -387,9 +388,20 @@ export class GameScene extends Phaser.Scene {
             break;
 
           case 'F': {
+            // Финиш — это не касание флажка, а вся область за ним: пробежал
+            // черту и всё, этап пройден.
+            this.finishX = cx;
             this.flag = this.physics.add
               .staticImage(cx, top + TILE - 50, 'flag')
               .setDepth(2);
+
+            // Стена сразу за флажком. Черту игрок пересекает по любой высоте,
+            // но если он перелетит её в прыжке и приземлится дальше, за
+            // финишной площадкой может оказаться пропасть. Стена не даёт туда
+            // улететь.
+            const стена = this.add.rectangle(cx + TILE * 2, top - TILE * 3, TILE, TILE * 9);
+            this.physics.add.existing(стена, true);
+            this.solids.add(стена);
             this.tweens.add({
               targets: this.flag,
               scaleX: 1.06,
@@ -587,7 +599,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.pebbles, this.flyers, (pebble, e) => this.pebbleHit(pebble, e));
 
     if (this.flag) {
-      this.physics.add.overlap(this.player, this.flag, () => this.finishLevel());
+      // Касание больше не нужно: черту проверяем в цикле по координате.
     }
   }
 
@@ -962,6 +974,12 @@ export class GameScene extends Phaser.Scene {
       this.auraRings.forEach((r) => r.setPosition(this.player.x, this.player.y));
     }
     this.updateAbilityIcons(time);
+
+    // Пересекла финишную черту — этап пройден, где бы она ни была по высоте.
+    if (this.finishX != null && this.player.x >= this.finishX) {
+      this.finishLevel();
+      return;
+    }
 
     // Упала в пропасть: считаем от последней опоры, а не от дна карты.
     const пределПадения = this.levelData.fallLimit ?? FALL_LIMIT;

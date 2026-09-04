@@ -6,26 +6,23 @@ import { getLevelResult, isLevelUnlocked, getSave, getLevel } from '../save.js';
 import { t, getLanguage, formatTime } from '../i18n.js';
 import { makeButton, panel, starRow, coinBadge, FONT, COLORS } from '../ui.js';
 
-/** Выбор этапа: карточка на каждый этап со звёздами и лучшим результатом. */
+/**
+ * Выбор маршрута, а внутри него — этапа.
+ *
+ * Экрана два, но сцена одна: сначала карточки маршрутов, по нажатию — этапы
+ * выбранного. Раскладывать все этапы разом нельзя, их станет двадцать пять, и
+ * карточки съёжатся до нечитаемых. В будущем список маршрутов заменит
+ * кликабельная карта — то есть меняться будет только этот верхний экран.
+ */
 export class LevelSelectScene extends Phaser.Scene {
   constructor() {
     super('LevelSelectScene');
   }
 
-  create() {
+  create(data) {
+    this.routeIndex = data?.route ?? null;
+
     createBackground(this, 0, GAME_WIDTH);
-
-    this.add
-      .text(GAME_WIDTH / 2, 76, t('stageSelect'), {
-        fontFamily: FONT,
-        fontSize: '52px',
-        color: '#ffffff',
-        fontStyle: 'bold',
-        stroke: '#7a4a28',
-        strokeThickness: 10,
-      })
-      .setOrigin(0.5);
-
     coinBadge(this, 40, 44, getSave().coins, 40);
 
     this.add
@@ -39,106 +36,194 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5);
 
-    // Этапы разложены по маршрутам: один маршрут — одна строка карточек.
-    // Карточки ужимаются под самый длинный маршрут, иначе при 25 этапах
-    // жёсткая ширина давно бы уехала за край экрана.
-    const gap = 24;
-    const margin = 80;
-    const вСтроке = Math.max(...ROUTES.map((r) => r.levels.length));
-    const cardW = Math.min(260, (GAME_WIDTH - margin * 2 - (вСтроке - 1) * gap) / вСтроке);
-    const scale = cardW / 300;
-    // Строки делят свободную высоту: заголовок сверху, кнопка «Назад» снизу.
-    // Жёсткие числа не годятся — маршрутов станет пять.
-    const верх = 128;
-    const низ = GAME_HEIGHT - 92;
-    const высотаСтроки = (низ - верх) / ROUTES.length;
-    const картаH = Math.min(340, высотаСтроки - 34);
+    if (this.routeIndex === null) this.showRoutes();
+    else this.showStages(this.routeIndex);
+  }
+
+  /** Заголовок экрана. */
+  title(текст) {
+    this.add
+      .text(GAME_WIDTH / 2, 76, текст, {
+        fontFamily: FONT,
+        fontSize: '52px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#7a4a28',
+        strokeThickness: 10,
+      })
+      .setOrigin(0.5);
+  }
+
+  /** Маршрут открыт, если пройден его первый этап или предыдущий маршрут. */
+  routeUnlocked(ri) {
+    return isLevelUnlocked(ROUTES[ri].levels[0]);
+  }
+
+  /** Сколько звёзд собрано в маршруте и сколько их всего. */
+  routeStars(ri) {
+    const этапы = ROUTES[ri].levels;
+    const собрано = этапы.reduce((s, i) => s + getLevelResult(i).stars, 0);
+    return { собрано, всего: этапы.length * 3 };
+  }
+
+  // ── Экран маршрутов ─────────────────────────────────────────────────────
+  showRoutes() {
+    this.title(t('routeSelect'));
+
+    const gap = 40;
+    const cardW = Math.min(300, (GAME_WIDTH - 160 - (ROUTES.length - 1) * gap) / ROUTES.length);
+    const cardH = 340;
+    const всего = ROUTES.length * cardW + (ROUTES.length - 1) * gap;
+    const startX = (GAME_WIDTH - всего) / 2 + cardW / 2;
+    const y = GAME_HEIGHT / 2 + 10;
 
     ROUTES.forEach((маршрут, ri) => {
-      const строкаY = верх + ri * высотаСтроки + 34 + картаH / 2;
-      const всего = маршрут.levels.length;
-      const ширинаСтроки = всего * cardW + (всего - 1) * gap;
-      const startX = (GAME_WIDTH - ширинаСтроки) / 2 + cardW / 2;
+      const x = startX + ri * (cardW + gap);
+      const открыт = this.routeUnlocked(ri);
+      const звёзды = this.routeStars(ri);
+
+      panel(this, x, y, cardW, cardH);
 
       this.add
-        .text(margin, строкаY - картаH / 2 - 22, `${t('route')} ${ri + 1}. ${
-          getLanguage() === 'ru' ? маршрут.name : маршрут.nameEn
-        }`, {
+        .text(x, y - cardH / 2 + 34, `${t('route')} ${ri + 1}`, {
           fontFamily: FONT,
-          fontSize: '26px',
-          color: '#ffffff',
+          fontSize: '28px',
+          color: COLORS.inkDim,
           fontStyle: 'bold',
-          stroke: '#7a4a28',
-          strokeThickness: 6,
         })
-        .setOrigin(0, 0.5);
+        .setOrigin(0.5);
 
-      маршрут.levels.forEach((i, j) => {
-        const level = LEVELS[i];
-        const x = startX + j * (cardW + gap);
-        const y = строкаY;
-        const unlocked = isLevelUnlocked(i);
-        const result = getLevelResult(i);
+      this.add
+        .text(x, y - cardH / 2 + 82, getLanguage() === 'ru' ? маршрут.name : маршрут.nameEn, {
+          fontFamily: FONT,
+          fontSize: '32px',
+          color: COLORS.ink,
+          fontStyle: 'bold',
+          align: 'center',
+          wordWrap: { width: cardW - 40 },
+        })
+        .setOrigin(0.5);
 
-        panel(this, x, y, cardW, картаH);
-
-        this.add
-          .text(x, y - картаH / 2 + 24, `${t('stage')} ${j + 1}`, {
-            fontFamily: FONT,
-            fontSize: `${Math.round(26 * scale)}px`,
-            color: COLORS.inkDim,
-            fontStyle: 'bold',
-          })
-          .setOrigin(0.5);
-
-        this.add
-          .text(x, y - картаH / 2 + 62, getLanguage() === 'ru' ? level.name : level.nameEn, {
-            fontFamily: FONT,
-            fontSize: `${Math.round(25 * scale)}px`,
-            color: COLORS.ink,
-            fontStyle: 'bold',
-            align: 'center',
-            wordWrap: { width: cardW - 30 },
-          })
-          .setOrigin(0.5);
-
-        starRow(this, x, y - 4, unlocked ? result.stars : 0, 0.55 * scale);
-
-        const lines = unlocked
-          ? [
-              `${t('collected')}: ${Math.round(result.best * 100)}%`,
-              `${t('coins')}: ${countCoins(i)}`,
-              result.bestTime ? `${t('time')}: ${formatTime(result.bestTime)}` : '',
-            ].filter(Boolean)
-          : [t('lockedHint')];
-
-        this.add
-          .text(x, y + 22, lines.join('\n'), {
-            fontFamily: FONT,
-            fontSize: `${Math.round(18 * scale)}px`,
-            color: COLORS.inkDim,
-            align: 'center',
-            lineSpacing: 3,
-            wordWrap: { width: cardW - 30 },
-          })
-          .setOrigin(0.5);
-
-        const btn = makeButton(
-          this,
+      this.add
+        .text(
           x,
-          y + картаH / 2 - 34,
-          cardW - 46,
-          56,
-          unlocked ? t('play') : t('locked'),
-          () => this.scene.start('GameScene', { levelIndex: i })
-        );
-        if (!unlocked) btn.setEnabled(false);
-      });
+          y + 6,
+          открыт
+            ? `${t('stages')}: ${маршрут.levels.length}\n${t('stars')}: ${звёзды.собрано} / ${звёзды.всего}`
+            : t('lockedHint'),
+          {
+            fontFamily: FONT,
+            fontSize: '24px',
+            color: COLORS.inkDim,
+            align: 'center',
+            lineSpacing: 6,
+            wordWrap: { width: cardW - 40 },
+          }
+        )
+        .setOrigin(0.5);
+
+      const btn = makeButton(
+        this,
+        x,
+        y + cardH / 2 - 46,
+        cardW - 60,
+        66,
+        открыт ? t('open') : t('locked'),
+        () => this.scene.start('LevelSelectScene', { route: ri })
+      );
+      if (!открыт) btn.setEnabled(false);
     });
 
     makeButton(this, 140, GAME_HEIGHT - 56, 200, 64, t('back'), () => this.scene.start('MenuScene'), {
       fill: COLORS.panel,
       edge: COLORS.panelEdge,
     });
+  }
+
+  // ── Экран этапов одного маршрута ────────────────────────────────────────
+  showStages(ri) {
+    const маршрут = ROUTES[ri];
+    this.title(getLanguage() === 'ru' ? маршрут.name : маршрут.nameEn);
+
+    const gap = 26;
+    const всего = маршрут.levels.length;
+    const cardW = Math.min(280, (GAME_WIDTH - 160 - (всего - 1) * gap) / всего);
+    const scale = cardW / 300;
+    const cardH = 360;
+    const ширина = всего * cardW + (всего - 1) * gap;
+    const startX = (GAME_WIDTH - ширина) / 2 + cardW / 2;
+    const y = GAME_HEIGHT / 2 + 10;
+
+    маршрут.levels.forEach((i, j) => {
+      const level = LEVELS[i];
+      const x = startX + j * (cardW + gap);
+      const открыт = isLevelUnlocked(i);
+      const результат = getLevelResult(i);
+
+      panel(this, x, y, cardW, cardH);
+
+      this.add
+        .text(x, y - cardH / 2 + 30, `${t('stage')} ${j + 1}`, {
+          fontFamily: FONT,
+          fontSize: `${Math.round(28 * scale)}px`,
+          color: COLORS.inkDim,
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
+
+      this.add
+        .text(x, y - cardH / 2 + 76, getLanguage() === 'ru' ? level.name : level.nameEn, {
+          fontFamily: FONT,
+          fontSize: `${Math.round(27 * scale)}px`,
+          color: COLORS.ink,
+          fontStyle: 'bold',
+          align: 'center',
+          wordWrap: { width: cardW - 36 },
+        })
+        .setOrigin(0.5);
+
+      starRow(this, x, y - 20, открыт ? результат.stars : 0, 0.6 * scale);
+
+      const строки = открыт
+        ? [
+            `${t('collected')}: ${Math.round(результат.best * 100)}%`,
+            `${t('coins')}: ${countCoins(i)}`,
+            результат.bestTime ? `${t('time')}: ${formatTime(результат.bestTime)}` : '',
+          ].filter(Boolean)
+        : [t('lockedHint')];
+
+      this.add
+        .text(x, y + 52, строки.join('\n'), {
+          fontFamily: FONT,
+          fontSize: `${Math.round(21 * scale)}px`,
+          color: COLORS.inkDim,
+          align: 'center',
+          lineSpacing: 4,
+          wordWrap: { width: cardW - 36 },
+        })
+        .setOrigin(0.5);
+
+      const btn = makeButton(
+        this,
+        x,
+        y + cardH / 2 - 40,
+        cardW - 50,
+        62,
+        открыт ? t('play') : t('locked'),
+        () => this.scene.start('GameScene', { levelIndex: i })
+      );
+      if (!открыт) btn.setEnabled(false);
+    });
+
+    makeButton(
+      this,
+      140,
+      GAME_HEIGHT - 56,
+      200,
+      64,
+      t('back'),
+      () => this.scene.start('LevelSelectScene'),
+      { fill: COLORS.panel, edge: COLORS.panelEdge }
+    );
   }
 }
