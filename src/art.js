@@ -224,27 +224,33 @@ export function createTextures(scene) {
     g.strokePath();
   };
 
-  // Черепашка: панцирь и добрая мордочка. Топчется прыжком.
+  // Черепашка. Голова смотрит вправо — туда же, куда она идёт по умолчанию;
+  // под панцирем плотное тельце, иначе она выглядит полупустой.
   g.fillStyle(0x8ed081, 1);
   g.lineStyle(4, 0x3f7a3a, 1);
-  g.fillEllipse(20, 34, 22, 18); // голова
-  g.strokeEllipse(20, 34, 22, 18);
-  g.fillEllipse(14, 48, 14, 8); // лапки
-  g.strokeEllipse(14, 48, 14, 8);
-  g.fillEllipse(44, 48, 14, 8);
-  g.strokeEllipse(44, 48, 14, 8);
+  g.fillRoundedRect(6, 30, 44, 20, 9); // тело под панцирем
+  g.strokeRoundedRect(6, 30, 44, 20, 9);
+  g.fillEllipse(14, 50, 15, 9); // лапки
+  g.strokeEllipse(14, 50, 15, 9);
+  g.fillEllipse(40, 50, 15, 9);
+  g.strokeEllipse(40, 50, 15, 9);
+
+  g.fillEllipse(56, 32, 24, 21); // голова справа
+  g.strokeEllipse(56, 32, 24, 21);
+
   g.fillStyle(0x9c6236, 1);
   g.lineStyle(4, 0x5a3a22, 1);
   g.beginPath();
-  g.arc(36, 34, 22, Math.PI, 0); // панцирь
+  g.arc(27, 32, 23, Math.PI, 0); // панцирь
   g.fillPath();
   g.strokePath();
   g.fillStyle(0xbf8146, 1);
-  g.fillCircle(30, 26, 5);
-  g.fillCircle(44, 28, 5);
-  eyes(15, 25, 30, 5);
-  smile(20, 37, 4);
-  bake(g, 'turtle', 60, 56);
+  g.fillCircle(20, 24, 5);
+  g.fillCircle(34, 26, 5);
+
+  eyes(52, 62, 28, 5);
+  smile(58, 36, 4);
+  bake(g, 'turtle', 72, 58);
 
   // Муха: тёмное тельце и большие крылья. Летает вверх-вниз.
   g.fillStyle(0xdff3ff, 0.85);
@@ -279,29 +285,45 @@ export function createTextures(scene) {
   smile(28, 34, 9);
   bake(g, 'frog', 60, 56);
 
-  // Ёжик: колючая спина — прыгать на него нельзя, и это видно.
+  // Ёжик: спина колючая — прыгать нельзя, и это видно. Иголки выложены
+  // синусоидой с горкой посередине, а не частоколом одной высоты.
   g.fillStyle(0x6b4a33, 1);
-  g.lineStyle(4, 0x3d2a1c, 1);
-  for (let i = 0; i < 7; i++) {
-    const x = 10 + i * 7;
+  g.lineStyle(3, 0x3d2a1c, 1);
+  for (let i = 0; i < 11; i++) {
+    const x = 8 + i * 4.6;
+    // Горка посередине: высота иголки идёт по синусу от края к краю.
+    const высота = 8 + Math.sin((i / 10) * Math.PI) * 20;
     g.fillPoints(
       [
-        { x, y: 30 },
-        { x: x + 4, y: 6 + (i % 2) * 4 },
-        { x: x + 9, y: 30 },
+        { x: x - 4, y: 34 },
+        { x: x + 1, y: 34 - высота },
+        { x: x + 5, y: 34 },
       ],
       true
     );
   }
+
   g.fillStyle(0xc9a06b, 1);
-  g.fillEllipse(30, 36, 54, 26); // тело
-  g.strokeEllipse(30, 36, 54, 26);
+  g.lineStyle(4, 0x8d6b4b, 1);
+  g.fillEllipse(32, 40, 56, 24); // тело
+  g.strokeEllipse(32, 40, 56, 24);
+
+  // Ножки: без них ёжик казался плывущим
   g.fillStyle(0x8d6b4b, 1);
-  g.fillEllipse(50, 36, 20, 16); // мордочка
+  g.lineStyle(3, 0x5a3a22, 1);
+  [16, 30, 46].forEach((x) => {
+    g.fillRoundedRect(x, 48, 9, 9, 4);
+    g.strokeRoundedRect(x, 48, 9, 9, 4);
+  });
+
+  g.fillStyle(0xdcb984, 1);
+  g.lineStyle(3, 0x8d6b4b, 1);
+  g.fillEllipse(56, 41, 22, 18); // мордочка справа
+  g.strokeEllipse(56, 41, 22, 18);
   g.fillStyle(0x2f2016, 1);
-  g.fillCircle(58, 34, 3); // носик
-  eyes(44, 52, 32, 4);
-  bake(g, 'hedgehog', 66, 50);
+  g.fillCircle(65, 40, 3.5); // носик
+  eyes(50, 60, 37, 4);
+  bake(g, 'hedgehog', 72, 60);
 
   // Дикобраз: тот же принцип, но иглы во все стороны — он ими и стреляет.
   g.fillStyle(0x5a4636, 1);
@@ -372,17 +394,39 @@ export function createTextures(scene) {
   g.strokeRoundedRect(0, 2, 24, 12, 6);
   bake(g, 'tongue', 24, 16);
 
-  // Змея: выглядывает из норы, прыгать на неё нельзя — кусает в полёте.
+  // Змея: длинная и тонкая. Тело — основной хитбокс, поэтому оно и рисуется
+  // главным: извивающийся ствол от норы вверх и голова с язычком.
+  g.lineStyle(17, 0x3f6b2a, 1);
+  g.beginPath();
+  g.moveTo(20, 116);
+  g.lineTo(20, 92);
+  g.lineTo(34, 74);
+  g.lineTo(18, 54);
+  g.lineTo(30, 34);
+  g.strokePath();
+  g.lineStyle(12, 0x7bb356, 1);
+  g.beginPath();
+  g.moveTo(20, 116);
+  g.lineTo(20, 92);
+  g.lineTo(34, 74);
+  g.lineTo(18, 54);
+  g.lineTo(30, 34);
+  g.strokePath();
+
+  // Пятнышки вдоль тела
+  g.fillStyle(0x5d8f3d, 1);
+  [[20, 100], [28, 82], [24, 62], [26, 44]].forEach(([x, y]) => g.fillCircle(x, y, 3.5));
+
   g.fillStyle(0x7bb356, 1);
   g.lineStyle(4, 0x3f6b2a, 1);
-  g.fillEllipse(26, 44, 30, 30);
-  g.strokeEllipse(26, 44, 30, 30);
-  g.fillEllipse(30, 20, 34, 26); // голова
-  g.strokeEllipse(30, 20, 34, 26);
-  eyes(24, 38, 16, 5);
+  g.fillEllipse(34, 24, 34, 24); // голова
+  g.strokeEllipse(34, 24, 34, 24);
+  eyes(28, 42, 20, 4.5);
   g.fillStyle(0xe0454f, 1);
-  g.fillPoints([{ x: 44, y: 26 }, { x: 56, y: 24 }, { x: 44, y: 30 }], true); // язычок
-  bake(g, 'snake', 60, 60);
+  g.fillPoints([{ x: 50, y: 26 }, { x: 66, y: 23 }, { x: 66, y: 29 }], true); // язычок
+  g.fillStyle(0x3f6b2a, 1);
+  g.fillRect(48, 26, 4, 3);
+  bake(g, 'snake', 70, 124);
 
   // Нора: яма, прикрытая соломой (ТЗ) — её видно заранее
   g.fillStyle(0x3d2a1c, 1);
@@ -487,32 +531,25 @@ export function createTextures(scene) {
     g.fillPath();
   };
 
-  // Угли под пламенем
-  g.fillStyle(0x8a3a12, 1);
-  g.fillEllipse(34, 62, 46, 12);
-
-  flame(34, 64, 40, 52, 0xe8480f); // внешнее пламя
-  flame(34, 62, 27, 38, 0xf5900f); // среднее
-  flame(34, 60, 15, 24, 0xffd451); // сердцевина
+  // Пламя и поленья — двумя отдельными картинками: в игре дрожать должен
+  // только огонь, а поленья обязаны лежать смирно.
+  flame(34, 56, 40, 52, 0xe8480f); // внешнее пламя
+  flame(34, 54, 27, 38, 0xf5900f); // среднее
+  flame(34, 52, 15, 24, 0xffd451); // сердцевина
   g.fillStyle(0xfff3b0, 0.9);
-  g.fillEllipse(34, 52, 8, 12);
+  g.fillEllipse(34, 44, 8, 12);
+  bake(g, 'campfire-flame', 68, 60);
 
-  // Два полена крест-накрест под огнём
-  const log = (x1, y1, x2, y2) => {
-    g.lineStyle(13, 0x8d6b4b, 1);
-    g.lineBetween(x1, y1, x2, y2);
-    g.lineStyle(4, 0x5a3a22, 1);
-    g.lineBetween(x1, y1, x2, y2);
-    g.lineStyle(0);
-  };
+  g.fillStyle(0x8a3a12, 1);
+  g.fillEllipse(34, 8, 46, 12); // угли
   g.fillStyle(0x8d6b4b, 1);
   g.lineStyle(4, 0x5a3a22, 1);
-  g.fillRoundedRect(4, 62, 60, 14, 7);
-  g.strokeRoundedRect(4, 62, 60, 14, 7);
+  g.fillRoundedRect(4, 8, 60, 14, 7); // полено
+  g.strokeRoundedRect(4, 8, 60, 14, 7);
   g.fillStyle(0x6b4a33, 1);
-  g.fillEllipse(11, 69, 10, 10);
-  g.fillEllipse(57, 69, 10, 10);
-  bake(g, 'campfire', 68, 80);
+  g.fillEllipse(11, 15, 10, 10);
+  g.fillEllipse(57, 15, 10, 10);
+  bake(g, 'campfire-logs', 68, 26);
 
   // Пружина: сжатая спираль на подставке, даёт двойной прыжок вверх
   g.fillStyle(0x9aa7b4, 1);

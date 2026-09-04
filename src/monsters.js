@@ -52,7 +52,7 @@ export const MONSTERS = {
     xp: XP.monster.easy,
     stompable: true,
     ground: true,
-    body: { w: 48, h: 34, ox: 6, oy: 20 },
+    body: { w: 56, h: 32, ox: 8, oy: 22 },
     speed: 45,
     update: patrol,
   },
@@ -74,8 +74,9 @@ export const MONSTERS = {
     stompable: true,
     ground: true,
     body: { w: 46, h: 34, ox: 7, oy: 20 },
-    speed: 90,
-    hopPower: -420,
+    // Скорость и прыжок подняты на 20% — лягушка стала заметно живее.
+    speed: 108,
+    hopPower: -504,
     hopEvery: 1400,
     update: hop,
   },
@@ -87,8 +88,8 @@ export const MONSTERS = {
     xp: XP.monster.medium,
     stompable: false,
     ground: true,
-    body: { w: 54, h: 26, ox: 6, oy: 22 },
-    speed: 110,
+    body: { w: 60, h: 28, ox: 6, oy: 28 },
+    speed: 132, // на 20% быстрее прежнего
     update: patrol,
   },
 
@@ -99,7 +100,8 @@ export const MONSTERS = {
     stompable: true,
     ground: false,
     body: { w: 40, h: 30, ox: 8, oy: 12 },
-    float: { x: 120, y: 150, ms: 1900 },
+    // Размах на 30% шире, а времени на него меньше — выходит заметно резвее.
+    float: { x: 156, y: 195, ms: 1460 },
   },
 
   // ── Сложные ────────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ export const MONSTERS = {
     ground: true,
     body: { w: 46, h: 46, ox: 11, oy: 14 },
     speed: 0,
-    shootEvery: 2000,
+    shootEvery: 2200, // на 10% реже прежнего
     warnMs: 500,
     update(scene, m, time) {
       m.setVelocityX(0);
@@ -189,7 +191,7 @@ export const MONSTERS = {
       const dir = player.x < m.x ? -1 : 1;
       // Ровно 45 градусов: одинаковая скорость по обеим осям и без
       // гравитации, иначе удар превращается в отвесное падение.
-      m.setVelocity(dir * 340, 340);
+      m.setVelocity(dir * 408, 408); // на 20% быстрее прежнего
     },
   },
 
@@ -201,11 +203,13 @@ export const MONSTERS = {
     stompable: true,
     ground: true,
     body: { w: 56, h: 40, ox: 8, oy: 24 },
-    speed: 70,
-    hopPower: -380,
-    hopEvery: 1800,
-    sight: 260,
+    // Прыжок выше и ход на 30% быстрее — жаба перестала быть вялой.
+    speed: 91,
+    hopPower: -494,
+    hopEvery: 1500,
+    sight: 320,
     tongueEvery: 2400,
+    tongueReach: 220, // втрое дальше прежнего
     update(scene, m, time) {
       const player = scene.player;
       const dist = Math.abs(player.x - m.x);
@@ -222,34 +226,64 @@ export const MONSTERS = {
   },
 
   z: {
-    // Змея. Сидит в норе, вылезает, когда капибара подходит близко, и через
-    // три секунды прячется обратно. Прыгать нельзя — кусает в полёте.
+    // Змея. Длинная, из норы поднимается во весь рост и бросается на
+    // капибару, пока та рядом. Основной хитбокс — само тело, поэтому прыгать
+    // на неё нельзя: она кусает и в полёте.
     key: 'snake',
     xp: XP.monster.hard,
     stompable: false,
     ground: false,
-    body: { w: 40, h: 44, ox: 10, oy: 14 },
-    sight: 200,
-    outMs: 3000,
-    hideMs: 1500,
+    body: { w: 30, h: 104, ox: 12, oy: 14 },
+    sight: 300, // издалека замечает
+    strikeRange: 190, // на этой дистанции бросается
+    strikeEvery: 900, // и повторяет броски, пока игрок близко
+    outMs: 4200,
+    hideMs: 1200,
     update(scene, m, time) {
-      const dist = Math.abs(scene.player.x - m.x);
+      const игрок = scene.player;
+      const dist = Math.abs(игрок.x - m.x);
 
-      if (m.out) {
-        if (time >= m.hideAt) {
-          m.out = false;
-          m.nextOutAt = time + m.hideMs;
-          scene.tweens.add({ targets: m, y: m.homeY + 46, alpha: 0, duration: 300 });
-          m.body.enable = false;
+      if (!m.out) {
+        if (dist < m.sight && time >= (m.nextOutAt || 0)) {
+          m.out = true;
+          m.hideAt = time + m.outMs;
+          m.body.enable = true;
+          m.nextStrikeAt = time + 250;
+          scene.tweens.add({
+            targets: m,
+            y: m.homeY,
+            alpha: 1,
+            duration: 240,
+            ease: 'Back.Out',
+          });
         }
         return;
       }
 
-      if (dist < m.sight && time >= (m.nextOutAt || 0)) {
-        m.out = true;
-        m.hideAt = time + m.outMs;
-        m.body.enable = true;
-        scene.tweens.add({ targets: m, y: m.homeY, alpha: 1, duration: 260, ease: 'Back.Out' });
+      // Пока игрок рядом, змея не прячется — прячется, только когда он ушёл
+      if (dist < m.sight) m.hideAt = Math.max(m.hideAt, time + 1200);
+
+      if (time >= m.hideAt) {
+        m.out = false;
+        m.nextOutAt = time + m.hideMs;
+        m.body.enable = false;
+        scene.tweens.add({ targets: m, y: m.homeY + 96, alpha: 0, duration: 280 });
+        return;
+      }
+
+      // Бросок: тело вытягивается в сторону капибары и возвращается.
+      if (dist < m.strikeRange && time >= (m.nextStrikeAt || 0)) {
+        m.nextStrikeAt = time + m.strikeEvery;
+        const dir = игрок.x < m.x ? -1 : 1;
+        m.setFlipX(dir < 0);
+        scene.tweens.add({
+          targets: m,
+          x: m.x + dir * 70,
+          angle: dir * 22,
+          duration: 170,
+          yoyo: true,
+          ease: 'Back.In',
+        });
       }
     },
   },

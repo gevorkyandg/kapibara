@@ -162,7 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.fallers = this.physics.add.staticGroup(); // падающие платформы
     this.movers = this.physics.add.group(); // движущиеся платформы
     this.quills = this.physics.add.group(); // иглы дикобраза
-    this.tongues = this.physics.add.group(); // языки жаб
+    this.tongues = []; // языки жаб: обычные картинки, попадание считаем сами
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
@@ -206,7 +206,12 @@ export class GameScene extends Phaser.Scene {
 
           case '~': {
             // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).
-            const fire = this.add.image(cx, top + TILE - 34, 'campfire').setDepth(2);
+            // Поленья лежат смирно, дрожит только пламя.
+            this.add.image(cx, top + TILE - 13, 'campfire-logs').setDepth(2);
+            const fire = this.add
+              .image(cx, top + TILE - 26, 'campfire-flame')
+              .setOrigin(0.5, 1)
+              .setDepth(2);
             this.tweens.add({
               targets: fire,
               scaleY: 1.12,
@@ -324,15 +329,15 @@ export class GameScene extends Phaser.Scene {
     m.type = type;
     m.xpValue = type.xp;
     m.stompable = type.stompable;
-    m.speed = type.speed ?? 0;
-    m.hopPower = type.hopPower ?? 0;
-    m.hopEvery = type.hopEvery ?? 0;
-    m.sight = type.sight ?? 0;
-    m.shootEvery = type.shootEvery ?? 0;
-    m.warnMs = type.warnMs ?? 0;
-    m.tongueEvery = type.tongueEvery ?? 0;
-    m.outMs = type.outMs ?? 0;
-    m.hideMs = type.hideMs ?? 0;
+
+    // Все числа из описания переносим на самого монстра разом. Раньше они
+    // перечислялись поимённо, и добавленная настройка молча не доезжала:
+    // змея, например, переставала бросаться, потому что дальность броска
+    // осталась в описании и до неё не дошли.
+    for (const [ключ, значение] of Object.entries(type)) {
+      if (typeof значение === 'number') m[ключ] = значение;
+    }
+
     m.dir = Math.random() < 0.5 ? -1 : 1;
     m.nextHopAt = 0;
     m.homeY = y;
@@ -365,9 +370,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Змея сидит в норе и вылезает, только когда игрок подойдёт.
+    // Змея сидит в норе и вылезает, только когда игрок подойдёт. Основание
+    // тела должно стоять на земле, поэтому её опорная высота считается от
+    // низа клетки, а не от её центра.
     if (symbol === 'z') {
-      m.y = y + 46;
+      m.homeY = y - 26;
+      m.y = m.homeY + 96;
       m.setAlpha(0);
       m.body.enable = false;
     }
@@ -444,7 +452,6 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, (_p, coin) => this.collectCoin(coin));
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
     this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now));
-    this.physics.add.overlap(this.player, this.tongues, () => this.hurt(this.time.now));
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
     // Платформы, по которым можно ходить
@@ -1049,13 +1056,30 @@ export class GameScene extends Phaser.Scene {
 
   /** Жаба выстреливает языком: коснулся языка — потерял жизнь (ТЗ). */
   shootTongue(m, dir) {
-    const tongue = this.tongues.create(m.x + dir * 30, m.y + 6, 'tongue');
-    tongue.setDepth(3).setFlipX(dir < 0);
-    tongue.body.setAllowGravity(false);
-    tongue.setVelocityX(dir * 330);
+    const дальность = m.type.tongueReach ?? 120;
+
+    // Язык растёт из пасти сплошной полосой, а не летит отдельным комком.
+    const tongue = this.add
+      .image(m.x + dir * 26, m.y + 4, 'tongue')
+      .setOrigin(dir > 0 ? 0 : 1, 0.5)
+      .setDepth(3);
+    tongue.displayHeight = 13;
+    tongue.displayWidth = 8;
+    this.tongues.push(tongue);
     sfx.pop();
-    this.time.delayedCall(220, () => tongue.active && tongue.setVelocityX(-dir * 330));
-    this.time.delayedCall(470, () => tongue.active && tongue.destroy());
+
+    this.tweens.add({
+      targets: tongue,
+      displayWidth: дальность,
+      duration: 190,
+      hold: 130,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.tongues = this.tongues.filter((t) => t !== tongue);
+        tongue.destroy();
+      },
+    });
   }
 
   /**
@@ -1096,11 +1120,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateHazards() {
-    if (!this.hazards.length) return;
     const b = this.player.body;
     const rect = new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height);
+
     for (const hz of this.hazards) {
       if (Phaser.Geom.Intersects.RectangleToRectangle(rect, hz)) {
+        this.hurt(this.time.now);
+        return;
+      }
+    }
+
+    // Язык жабы: он тянется и укорачивается, поэтому границы берём у самой
+    // картинки, а не у физического тела.
+    for (const tongue of this.tongues) {
+      if (!tongue.active) continue;
+      if (Phaser.Geom.Intersects.RectangleToRectangle(rect, tongue.getBounds())) {
         this.hurt(this.time.now);
         return;
       }
@@ -1255,9 +1289,10 @@ export class GameScene extends Phaser.Scene {
     const body = this.player.body;
     if (body.velocity.y < 0 || body.bottom > spring.body.top + 30) return;
 
-    // Прижимаем капибару к пружине на время сжатия
+    // Ставим капибару ровно на пружину: сдвигаем ровно на столько, на
+    // сколько ноги провалились ниже её верха. Иначе она оседала до земли.
     this.player.setVelocityY(0);
-    this.player.y = spring.body.top - body.halfHeight - body.offset.y + 6;
+    this.player.y += spring.body.top - body.bottom;
 
     this.springHold = {
       spring,
@@ -1276,8 +1311,13 @@ export class GameScene extends Phaser.Scene {
     const hold = this.springHold;
     if (!hold) return;
 
-    // Держим капибару на месте, пока пружина сжимается
+    // Держим капибару ровно на пружине, пока та сжимается. Скорость обнулять
+    // мало: гравитация за кадр всё равно утягивает вниз, и за время сжатия
+    // капибара оседала внутрь пружины.
     this.player.setVelocityY(0);
+    if (hold.spring.active) {
+      this.player.y += hold.spring.body.top - this.player.body.bottom;
+    }
 
     if (time - this.jumpBufferedAt < 130) hold.charged = true;
     if (time < hold.until) return;
