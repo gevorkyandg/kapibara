@@ -45,16 +45,39 @@ function создатьПолоску() {
 export function startWatchdog(game, показывать = true) {
   const полоска = показывать ? создатьПолоску() : null;
   const строки = [];
+  let тревога = false;
+
+  /**
+   * Строка состояния. Главное здесь — кадры в секунду: если их 50-60, игра
+   * жива и дело в чём-то другом (например, в том, куда попадают нажатия);
+   * если 0 — цикл действительно встал.
+   */
+  const состояние = () => {
+    const canvas = document.querySelector('canvas');
+    const холст = canvas ? `${Math.round(canvas.getBoundingClientRect().width)}×${Math.round(canvas.getBoundingClientRect().height)}` : '—';
+    return [
+      `кадров/с: ${Math.round(game.loop.actualFps)}`,
+      `кадр №${game.loop.frame}`,
+      `холст ${холст}`,
+      `окно ${window.innerWidth}×${window.innerHeight}`,
+      document.hidden ? 'окно скрыто' : 'окно видно',
+    ].join(' · ');
+  };
+
+  const перерисовать = () => {
+    if (!полоска) return;
+    полоска.textContent = [состояние(), ...строки].join('\n');
+    полоска.style.background = тревога ? 'rgba(180,60,40,.94)' : 'rgba(30,40,50,.82)';
+    полоска.style.display = 'block';
+  };
 
   const сказать = (текст) => {
     const время = new Date().toLocaleTimeString('ru-RU');
     строки.push(`${время} — ${текст}`);
-    if (строки.length > 6) строки.shift();
+    if (строки.length > 5) строки.shift();
+    тревога = true;
     console.warn('[сторож]', текст);
-    if (полоска) {
-      полоска.textContent = строки.join('\n');
-      полоска.style.display = 'block';
-    }
+    перерисовать();
   };
 
   /**
@@ -75,10 +98,29 @@ export function startWatchdog(game, показывать = true) {
       if (game.input.keyboard) game.input.keyboard.enabled = true;
       if (game.input.mouse) game.input.mouse.enabled = true;
       if (game.input.touch) game.input.touch.enabled = true;
+      пересчитатьРазмер();
     } catch (e) {
       сказать(`не удалось поднять: ${e}`);
     }
+    последнееДвижение = performance.now(); // не будим повторно в ту же секунду
   };
+
+  /**
+   * Пересчитать размер и положение картинки.
+   *
+   * Пока окно свёрнуто, его размеры для страницы нулевые. Phaser в режиме FIT
+   * запоминает эти нули и после разворачивания сам не пересчитывает — кадр
+   * остаётся растянутым и съехавшим. Хуже того, нажатия при этом попадают не
+   * туда, куда игрок целится: игра выглядит зависшей, хотя честно работает.
+   */
+  const пересчитатьРазмер = () => {
+    if (!game.scale) return;
+    game.scale.refresh();
+  };
+
+  // Когда кадры двигались в последний раз. Нужно и сторожу, и поднять().
+  let последнийКадр = -1;
+  let последнееДвижение = performance.now();
 
   // ── Ошибки. Упавший кадр обрывает цепочку — ловим и показываем текст ──────
   window.addEventListener('error', (e) => {
@@ -92,10 +134,8 @@ export function startWatchdog(game, показывать = true) {
   });
 
   // ── Кадры ────────────────────────────────────────────────────────────────
-  let последнийКадр = -1;
-  let последнееДвижение = performance.now();
-
   setInterval(() => {
+    перерисовать(); // счётчик кадров должен быть живым всегда
     if (document.hidden) return;
     const сейчас = performance.now();
 
@@ -116,15 +156,25 @@ export function startWatchdog(game, показывать = true) {
     if (performance.now() - последнееДвижение > 400) поднять('после возврата в окно');
   };
 
-  window.addEventListener('focus', проверить);
-  window.addEventListener('pageshow', проверить);
-  document.addEventListener('visibilitychange', проверить);
+  // Размер пересчитываем всегда, а не только при зависании: окно могли
+  // развернуть, и кадры при этом идут — но картинка осталась растянутой.
+  const приВозврате = () => {
+    пересчитатьРазмер();
+    проверить();
+  };
+
+  window.addEventListener('resize', пересчитатьРазмер);
+  window.addEventListener('focus', приВозврате);
+  window.addEventListener('pageshow', приВозврате);
+  document.addEventListener('visibilitychange', приВозврате);
 
   // Ввод Phaser разбирает внутри кадра: пока кадров нет, нажатия копятся,
   // и кнопки кажутся мёртвыми. Эти слушатели висят на странице и от цикла
   // не зависят, поэтому доберутся до игры в любом состоянии.
   document.addEventListener('pointerdown', проверить, true);
   document.addEventListener('keydown', проверить, true);
+
+  перерисовать();
 
   return { сказать, поднять };
 }
