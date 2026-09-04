@@ -88,6 +88,7 @@ export const LIVES = {
 export const DEBUG = {
   statsReset: true, // кнопка полного сброса прогресса
   cheats: true, // кнопки «+уровень» и «+10 монет» для быстрой проверки
+  diagnostics: true, // полоска сверху: ошибки и перезапуски игрового цикла
 };
 
 /**
