@@ -1485,7 +1485,9 @@ export class GameScene extends Phaser.Scene {
   updateBoulders(time, delta) {
     const настройки = this.levelData.boulder || {};
     const масштаб = настройки.scale ?? 1;
-    const скорость = настройки.speed ?? 300;
+    // Быстрее бега героя (270) с заметным запасом: на спуске валун должен
+    // догонять, а не плестись сзади до самого истечения срока.
+    const скорость = настройки.speed ?? 420;
 
     for (const run of this.boulderRuns) {
       if (run.fired) continue;
