@@ -1018,7 +1018,7 @@ export class GameScene extends Phaser.Scene {
     this.stageMs += delta;
     const осталось = Math.max(0, this.timeLimitMs - this.stageMs);
     this.timerText.setText(formatTime(осталось));
-    this.timerText.setColor(осталось < 10000 ? '#ff6b6b' : '#5a3a22');
+    this.timerText.setColor(осталось < 20000 ? '#ff6b6b' : '#5a3a22');
     if (осталось <= 0) {
       this.failStage('time');
       return;
@@ -1903,7 +1903,10 @@ export class GameScene extends Phaser.Scene {
    * spikeLead: 1 — точно под ноги, больше — падает впереди, и его видно.
    */
   updateDropSpikes(time, delta) {
-    const поУмолчанию = this.levelData.spikeLead ?? 1.35;
+    // Единица — шип приходит ровно на бегущего. Больше единицы значит «падает
+    // впереди», и такой шип уже не угроза, а украшение: игрок пробегает под
+    // ним, даже не сбавив шага.
+    const поУмолчанию = this.levelData.spikeLead ?? 1;
     const b = this.player.body;
     const игрок = new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height);
 
@@ -1918,7 +1921,13 @@ export class GameScene extends Phaser.Scene {
         const времяПадения = Math.sqrt((2 * высота) / PHYS.gravity);
         // Запас 1 — шип приходит ровно на бегущего, больше — падает впереди.
         const запас = s.точный ? 1 : поУмолчанию;
-        const дистанция = this.walkSpeed * (SPIKE_SHAKE_MS / 1000 + времяПадения) * запас;
+        // Считаем по той скорости, с которой игрок бежит прямо сейчас, а не
+        // по номинальной: иначе шип метит в некоего среднего героя и мимо
+        // настоящего промахивается. Стоящего считаем идущим шагом, иначе
+        // дистанция схлопнулась бы в ноль.
+        const ходИгрока = Math.abs(this.player.body.velocity.x);
+        const скорость = Math.max(ходИгрока, this.walkSpeed * 0.6);
+        const дистанция = скорость * (SPIKE_SHAKE_MS / 1000 + времяПадения) * запас;
         if (Math.abs(this.player.x - шип.x) > дистанция) continue;
 
         s.state = 'shake';
