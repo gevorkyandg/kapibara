@@ -75,6 +75,9 @@ const EARSHOT = 900;
 // ставим ближе.
 const BOULDER_DISTANCES = [900, 760, 620, 480, 360];
 
+// Насколько далеко от края экрана висит предупреждение о валуне.
+const WARN_MARGIN = 78;
+
 // Насколько выше земли он появляется. Камень падает на рельеф и катится по
 // нему — так место появления не зависит от того, что там за рельеф: горка,
 // ступеньки или ровное место.
@@ -1756,13 +1759,15 @@ export class GameScene extends Phaser.Scene {
       run.spawnX = место.col * TILE + TILE / 2;
       run.spawnY = место.row * TILE - BOULDER_DROP;
 
-      // Табличка стоит с той стороны, откуда покатится камень (ТЗ), и дрожит
-      // целую секунду, чтобы её точно заметили.
-      const знакX = откуда - run.dir * 200;
-      const знакРяд = this.surfaceRow(Math.floor(знакX / TILE), 0);
+      // Предупреждение висит у края экрана с той стороны, откуда идёт камень,
+      // и едет вместе с героем: пока он бежит, значок остаётся на виду.
+      // Раньше табличка стояла на земле, и убежавший вперёд игрок терял её из
+      // поля зрения ровно тогда, когда она нужнее всего.
+      const уКрая = run.dir > 0 ? WARN_MARGIN : GAME_WIDTH - WARN_MARGIN;
       const знак = this.add
-        .image(знакX, Math.min(знакРяд, this.rows - 1) * TILE - 31, ['sign', 'sign2', 'sign3'][run.count - 1] || 'sign3')
-        .setDepth(4);
+        .image(уКрая, GAME_HEIGHT / 2, `warn-${Math.min(run.count, 3)}`)
+        .setScrollFactor(0)
+        .setDepth(60);
       this.tweens.add({ targets: знак, angle: 7, duration: 70, yoyo: true, repeat: 13 });
 
       for (let i = 0; i < run.count; i++) {

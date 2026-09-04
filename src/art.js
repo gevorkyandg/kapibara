@@ -523,37 +523,7 @@ export function createTextures(scene) {
   g.fillCircle(24, 28, 3.4);
   bake(g, 'sign', 48, 62);
 
-  // Та же табличка, но с двумя знаками: столько валунов скатится подряд (ТЗ).
-  g.fillStyle(0x8d6b4b, 1);
-  g.lineStyle(4, 0x5a3a22, 1);
-  g.fillRoundedRect(20, 30, 8, 30, 3);
-  g.strokeRoundedRect(20, 30, 8, 30, 3);
-  g.fillStyle(0xffd451, 1);
-  g.lineStyle(4, 0xc9922a, 1);
-  g.fillRoundedRect(2, 2, 44, 32, 8);
-  g.strokeRoundedRect(2, 2, 44, 32, 8);
-  g.fillStyle(0x5a3a22, 1);
-  [15, 29].forEach((x) => {
-    g.fillRoundedRect(x - 3, 8, 6, 15, 3);
-    g.fillCircle(x, 28, 3.4);
-  });
-  bake(g, 'sign2', 48, 62);
 
-  // Три знака — три валуна подряд.
-  g.fillStyle(0x8d6b4b, 1);
-  g.lineStyle(4, 0x5a3a22, 1);
-  g.fillRoundedRect(20, 30, 8, 30, 3);
-  g.strokeRoundedRect(20, 30, 8, 30, 3);
-  g.fillStyle(0xffd451, 1);
-  g.lineStyle(4, 0xc9922a, 1);
-  g.fillRoundedRect(2, 2, 44, 32, 8);
-  g.strokeRoundedRect(2, 2, 44, 32, 8);
-  g.fillStyle(0x5a3a22, 1);
-  [11, 24, 37].forEach((x) => {
-    g.fillRoundedRect(x - 2.5, 8, 5, 15, 2.5);
-    g.fillCircle(x, 28, 3);
-  });
-  bake(g, 'sign3', 48, 62);
 
   // Табличка с ульем: предупреждает не об одной осе, а о целом рое (ТЗ роя).
   // Улей рисуем полосами-ярусами с летком внизу — так он читается сразу и не
@@ -578,6 +548,25 @@ export function createTextures(scene) {
   g.fillStyle(0x5a3a22, 1);
   g.fillCircle(24, 26, 2.6); // леток
   bake(g, 'sign-hive', 48, 62);
+
+  // Предупреждение о валуне. Оно висит у края экрана и едет вместе с героем,
+  // поэтому палочка ему не нужна: это не столб при дороге, а значок.
+  // Знаков столько же, сколько будет камней.
+  for (let знаков = 1; знаков <= 3; знаков++) {
+    g.fillStyle(0xffd451, 1);
+    g.lineStyle(5, 0xc9922a, 1);
+    g.fillRoundedRect(3, 3, 86, 56, 14);
+    g.strokeRoundedRect(3, 3, 86, 56, 14);
+    g.fillStyle(0x5a3a22, 1);
+    const шаг = 22;
+    const начало = 46 - ((знаков - 1) * шаг) / 2;
+    for (let i = 0; i < знаков; i++) {
+      const x = начало + i * шаг;
+      g.fillRoundedRect(x - 3.5, 13, 7, 22, 3.5);
+      g.fillCircle(x, 45, 4);
+    }
+    bake(g, `warn-${знаков}`, 92, 62);
+  }
 
   // Валун: катится по склону, трогать нельзя (ТЗ). Трещина и пятна нужны
   // не для красоты — без них не видно, что камень крутится.
