@@ -6,6 +6,7 @@ import {
   PHYS,
   TREAT_CHANCE,
   LIVES,
+  SLOPE_STEPS,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
@@ -50,6 +51,10 @@ const TREATS = [
  * долями от обычного прыжка капибары.
  */
 const SPRING_WINDOW = 260;
+// Высота одной ступеньки склона. Чем их больше в клетке, тем мельче шаг и
+// тем ровнее выглядит скат.
+const SLOPE_STEP = TILE / SLOPE_STEPS;
+
 // Сколько шип дрожит, прежде чем сорваться (ТЗ: «немного трясутся и потом падают»).
 const SPIKE_SHAKE_MS = 380;
 
@@ -189,6 +194,30 @@ export class GameScene extends Phaser.Scene {
             // Платформа занимает верхние 26 px клетки.
             this.solids.create(cx, top + 13, `platform-${th}`);
             break;
+
+          case '/':
+          case '\\': {
+            // Склон. Одна клетка — десять ступенек по 6 пикселей, и столько же
+            // отдельных тел в столкновениях: так картинка и физика совпадают,
+            // а капибара идёт по скату, не спотыкаясь.
+            this.add
+              .image(cx, cy, `slope-${ch === '/' ? 'up' : 'down'}-${th}`)
+              .setDepth(0);
+            for (let k = 0; k < SLOPE_STEPS; k++) {
+              const шагX = col * TILE + k * SLOPE_STEP;
+              const верх = top + (ch === '/' ? TILE - (k + 1) * SLOPE_STEP : k * SLOPE_STEP);
+              const высота = top + TILE - верх;
+              const тело = this.add.rectangle(
+                шагX + SLOPE_STEP / 2,
+                верх + высота / 2,
+                SLOPE_STEP,
+                высота
+              );
+              this.physics.add.existing(тело, true);
+              this.solids.add(тело);
+            }
+            break;
+          }
 
           case 'o':
             this.addCoin(cx, cy);
@@ -1162,6 +1191,16 @@ export class GameScene extends Phaser.Scene {
     if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return false;
     const ch = this.map[row][col];
     if (ch === '#') return true;
+    if (ch === '/' || ch === '\\') {
+      // Внутри клетки склона твёрдо всё, что ниже нужной ступеньки.
+      const местныйX = x - col * TILE;
+      const номер = Phaser.Math.Clamp(
+        Math.floor((ch === '/' ? местныйX : TILE - местныйX) / SLOPE_STEP),
+        0,
+        SLOPE_STEPS - 1
+      );
+      return y - row * TILE >= TILE - (номер + 1) * SLOPE_STEP;
+    }
     // Платформа — только верхние 26 px своей клетки.
     return ch === '=' && y - row * TILE <= 26;
   }
@@ -1425,17 +1464,24 @@ export class GameScene extends Phaser.Scene {
     const dir = Math.sign(vx);
     if (!(dir > 0 ? тело.blocked.right : тело.blocked.left)) return;
 
-    const впереди = this.player.x + dir * (тело.halfWidth + 6);
-    const низ = тело.bottom - 4;
-    if (!this.isSolidAtPixel(впереди, низ)) return; // упёрлись не в ступеньку
-    if (this.isSolidAtPixel(впереди, низ - TILE)) return; // стена выше клетки
+    const впереди = this.player.x + dir * (тело.halfWidth + 4);
+    if (!this.isSolidAtPixel(впереди, тело.bottom - 1)) return; // упёрлись не в пол
 
-    const подъём = тело.bottom - Math.floor(низ / TILE) * TILE;
-    if (подъём > TILE + 4) return;
+    // Ищем верх препятствия. Выше мелкой ступеньки — это уже уступ, и через
+    // него надо прыгать: так и задумано, иначе капибара въезжала бы на стены.
+    let подъём = null;
+    const предел = Math.ceil(SLOPE_STEP) + 4;
+    for (let h = 1; h <= предел; h++) {
+      if (!this.isSolidAtPixel(впереди, тело.bottom - 1 - h)) {
+        подъём = h;
+        break;
+      }
+    }
+    if (подъём === null) return;
     if (this.overlapsSolid(this.player.x + dir * 4, this.player.y - подъём)) return;
 
     this.player.y -= подъём;
-    this.player.x += dir * 4;
+    this.player.x += dir * 2;
   }
 
   /** Ряд верхней твёрдой клетки в столбце, считая от ряда «откуда смотрим». */
@@ -1514,23 +1560,14 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(1000 + run.count * 460, () => знак.destroy());
     }
 
-    // Катящиеся камни: держим их прижатыми к склону, крутим по пройденному
-    // пути и убираем, когда отработали.
-    const dt = delta / 1000;
+    // Катящиеся камни: крутим по пройденному пути и убираем, когда отработали.
     this.boulders.getChildren().forEach((b) => {
       if (!b.active) return;
 
-      // Склон в карте — лесенка из клеток. Если пустить камень свободно, он
-      // на каждой ступеньке подлетает и встречает игрока на уровне головы,
-      // так что перепрыгнуть его честно нельзя. Поэтому ведём его по самой
-      // поверхности: вверх подхватываем сразу, вниз опускаем плавно — и над
-      // пропастью он падает, а не парит.
-      const рядПод = this.surfaceRow(Math.floor(b.x / TILE), Math.floor(b.y / TILE));
-      const надо = рядПод * TILE - b.body.bottom;
-      b.y += надо < 0 ? надо : Math.min(надо, 1100 * dt);
-
       b.rotation += ((b.body.velocity.x * delta) / 1000 / 27) * (1 / масштаб);
-      const застрял = b.body.blocked.left || b.body.blocked.right;
+      // Встретил твёрдое — рассыпался. Столкновение гасит скорость вбок, по
+      // ней и узнаём: мелкие ступеньки склона её не трогают.
+      const застрял = time - b.born > 200 && Math.abs(b.body.velocity.x) < 40;
       const ушёл = b.x < -80 || b.x > this.worldW + 80 || b.y > this.worldH + 120;
       if (застрял || ушёл || time - b.born > 9000) {
         if (!ушёл) this.puff(b.x, b.y, 0x9aa3ac);
@@ -1543,10 +1580,7 @@ export class GameScene extends Phaser.Scene {
     const b = this.boulders.create(run.spawnX, run.spawnY, 'boulder');
     b.setDepth(3).setScale(масштаб);
     b.body.setCircle(27, 3, 3);
-    b.body.setAllowGravity(false); // высоту ведём сами, по поверхности склона
-    // Без отскока: подпрыгивая на ступенях, камень оказывался на уровне
-    // головы, и перепрыгнуть его на подъёме было нечестно.
-    b.setBounce(0);
+    b.setBounce(0); // без отскока камень держится склона и не летит в лицо
     b.setVelocityX(run.dir * скорость);
     b.born = this.time.now;
     this.puff(b.x, b.y, 0xb6bec6);

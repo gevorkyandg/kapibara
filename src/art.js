@@ -6,6 +6,8 @@
  * и не нужно ни у кого спрашивать права на рисунки.
  */
 
+import { SLOPE_STEPS } from './config.js';
+
 /** Палитры уровней: 0 — луг, 1 — закатный берег, 2 — вечерний лес. */
 export const THEMES = [
   {
@@ -881,6 +883,26 @@ export function createTextures(scene) {
     g.fillStyle(theme.grassDark, 1);
     g.fillRect(0, 14, 60, 4);
     bake(g, `ground-${i}`, 60, 60);
+
+    // Склоны. Внутри клетки — десять ступенек по 6 пикселей: с ними подъём
+    // выглядит ровным скатом, а не лесенкой в человеческий рост. Столько же
+    // ступенек стоит и в столкновениях, поэтому картинка не врёт.
+    for (const вверх of [true, false]) {
+      const ш = 60 / SLOPE_STEPS;
+      for (let k = 0; k < SLOPE_STEPS; k++) {
+        const x = k * ш;
+        const верх = вверх ? 60 - (k + 1) * ш : k * ш;
+        g.fillStyle(theme.dirt, 1);
+        g.fillRect(x, верх, ш, 60 - верх);
+        g.fillStyle(theme.grass, 1);
+        g.fillRect(x, верх, ш, Math.min(14, 60 - верх));
+        g.fillStyle(theme.grassDark, 1);
+        g.fillRect(x, верх + 12, ш, Math.min(4, Math.max(0, 60 - верх - 12)));
+      }
+      g.fillStyle(theme.dirtDark, 1);
+      g.fillEllipse(вверх ? 44 : 16, 48, 12, 8);
+      bake(g, `slope-${вверх ? 'up' : 'down'}-${i}`, 60, 60);
+    }
 
     g.fillStyle(theme.dirt, 1);
     g.fillRoundedRect(0, 0, 60, 26, 8);
