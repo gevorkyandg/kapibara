@@ -34,6 +34,8 @@
  * магазина — улучшения ускоряют игру, но не открывают путь.
  */
 
+import { generateStage } from './generate.js';
+
 export const CHUNK_W = 12;
 
 /** Обычная высота этапа — ровно экран. Высокие этапы задают свою. */
@@ -1282,6 +1284,66 @@ export const LEVELS = [
       'tallFinish',
     ],
   },
+  {
+    // Спуск в подземелье. Первая половина — острова над сплошной пропастью,
+    // дальше под ногами появляется земля, а провалы становятся редкими.
+    name: 'Спуск в подземелье',
+    nameEn: 'Into the deep',
+    theme: 2,
+    generate: {
+      rows: 34,
+      startRow: 4,
+      monsters: ['m', 'f', 'l', 'e', 'b', 'j'],
+      sections: [
+        { kind: 'down', style: 'islands', len: 48, monsters: 0.5, flyers: 0.4 },
+        { kind: 'down', style: 'islands', len: 36, monsters: 0.5, flyers: 0.4 },
+        { kind: 'flat', style: 'ground', len: 24, cave: true, spikes: 0.16, boulders: 0.5 },
+        { kind: 'down', style: 'ground', len: 48, pits: 0.4, boulders: 0.4, monsters: 0.6 },
+        { kind: 'flat', style: 'ground', len: 24, cave: true, spikes: 0.2, aimedSpikes: 0.4 },
+        { kind: 'down', style: 'ground', len: 36, pits: 0.35, monsters: 0.5 },
+      ],
+    },
+  },
+  {
+    // Подъём. Та же схема наоборот: сперва карабкаемся по островам над
+    // пустотой, потом под ногами появляется земля.
+    name: 'Подъём',
+    nameEn: 'The climb',
+    theme: 0,
+    generate: {
+      rows: 34,
+      startRow: 28,
+      monsters: ['m', 'f', 'l', 'e', 'b', 'j'],
+      sections: [
+        { kind: 'up', style: 'islands', len: 48, monsters: 0.5, flyers: 0.4 },
+        { kind: 'up', style: 'islands', len: 36, monsters: 0.5, flyers: 0.4 },
+        { kind: 'flat', style: 'ground', len: 24, boulders: 0.6, monsters: 0.6 },
+        { kind: 'up', style: 'ground', len: 48, pits: 0.4, boulders: 0.4, monsters: 0.6 },
+        { kind: 'flat', style: 'ground', len: 24, cave: true, spikes: 0.16 },
+        { kind: 'up', style: 'ground', len: 36, pits: 0.35, monsters: 0.5 },
+      ],
+    },
+  },
+  {
+    // Смена высот: подъёмы, спуски и равнины вперемешку.
+    name: 'Смена высот',
+    nameEn: 'Ups and downs',
+    theme: 1,
+    generate: {
+      rows: 34,
+      startRow: 16,
+      monsters: ['m', 'f', 'l', 'e', 'b', 'j'],
+      sections: [
+        { kind: 'flat', style: 'ground', len: 24, monsters: 0.5, boulders: 0.5 },
+        { kind: 'up', style: 'islands', len: 36, monsters: 0.4, flyers: 0.4 },
+        { kind: 'flat', style: 'ground', len: 24, cave: true, spikes: 0.18 },
+        { kind: 'down', style: 'islands', len: 36, monsters: 0.4, flyers: 0.4, hard: true },
+        { kind: 'up', style: 'ground', len: 36, pits: 0.4, boulders: 0.5, monsters: 0.6 },
+        { kind: 'down', style: 'ground', len: 36, pits: 0.4, monsters: 0.6 },
+        { kind: 'flat', style: 'ground', len: 24, cave: true, spikes: 0.2, aimedSpikes: 0.5 },
+      ],
+    },
+  },
 ];
 
 /**
@@ -1289,8 +1351,34 @@ export const LEVELS = [
  * Заодно проверяет размеры кусочков — если карта поедет, лучше узнать об
  * этом сразу с понятным сообщением, а не ловить кривой уровень в игре.
  */
+/**
+ * Маршруты: этапы сгруппированы, и внутри маршрута сложность растёт.
+ * Номера этапов не меняются никогда — по ним лежит сохранённый прогресс.
+ */
+export const ROUTES = [
+  { name: 'Знакомство', nameEn: 'First steps', levels: [0, 1, 2, 3, 4] },
+  { name: 'Высоты', nameEn: 'High ground', levels: [5, 6, 7] },
+];
+
+/** В каком маршруте лежит этап и какой он там по счёту. */
+export function routeOf(levelIndex) {
+  for (let r = 0; r < ROUTES.length; r++) {
+    const i = ROUTES[r].levels.indexOf(levelIndex);
+    if (i >= 0) return { route: r, stage: i };
+  }
+  return { route: 0, stage: levelIndex };
+}
+
 export function buildLevelMap(levelIndex) {
   const level = LEVELS[levelIndex];
+
+  // Этап может быть не нарисован, а описан. Зерно берём от номера этапа,
+  // чтобы карта каждый раз получалась одна и та же: подсчёт монет идёт
+  // отдельным проходом, и «плавающая» карта разошлась бы с рейтингом.
+  if (level.generate) {
+    return generateStage({ seed: levelIndex + 1, ...level.generate });
+  }
+
   const first = CHUNKS[level.chunks[0]];
   if (!first) throw new Error(`Нет кусочка уровня: ${level.chunks[0]}`);
 

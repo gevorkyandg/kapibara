@@ -68,6 +68,18 @@ const HIVE_SIGN_AHEAD = 520;
 // конца этапа звучит ровно так же громко, как стоящий рядом.
 const EARSHOT = 900;
 
+// Откуда прикатывается валун: за краем экрана, чтобы игрок увидел табличку
+// раньше самого камня.
+const BOULDER_SPAWN_AHEAD = 900;
+
+// Насколько ниже последней опоры можно улететь, прежде чем это считается
+// падением. Экран — 720, так что за нижним краем видимого падать уже некуда.
+//
+// Раньше смерть наступала только на дне карты. На ровных этапах это значило
+// секунду ожидания в пустоте, а на этапах-подъёмах, где под дорогой вообще
+// ничего нет, дно оказывается настолько ниже, что падение длилось бы вечно.
+const FALL_LIMIT = 760;
+
 const SPRING_IDLE = 0.8;
 const SPRING_CHARGED = 2;
 
@@ -427,14 +439,26 @@ export class GameScene extends Phaser.Scene {
     // Летуны без своего поведения просто покачиваются по заданным осям.
     if (type.float) {
       if (type.float.y) {
-        // Вниз опускаемся настолько, насколько есть место: иначе пчела с
-        // широким размахом уходила бы прямо в землю.
-        let глубина = type.float.y;
-        for (let d = 20; d <= type.float.y; d += 10) {
-          if (this.isSolidAtPixel(x, y + d + 26)) {
-            глубина = Math.max(0, d - 10);
-            break;
+        // Сколько места под монстром: глубже земли качаться нельзя, иначе
+        // пчела с широким размахом уходила бы прямо в грунт.
+        const место = () => {
+          for (let d = 20; d <= type.float.y; d += 10) {
+            if (this.isSolidAtPixel(x, y + d + 26)) return Math.max(0, d - 10);
           }
+          return type.float.y;
+        };
+
+        // Если места почти нет, поднимаем монстра, пока оно не появится.
+        // Без этого размах схлопывается почти в ноль, и летун просто висит на
+        // месте, прижавшись к платформе под собой — со стороны это выглядит
+        // как сломанный монстр.
+        let глубина = место();
+        for (let i = 0; i < 4 && глубина < type.float.y * 0.6; i++) {
+          if (this.isSolidAtPixel(x, y - TILE + 20)) break; // сверху стена
+          y -= TILE;
+          m.y = y;
+          m.homeY = y;
+          глубина = место();
         }
 
         this.tweens.add({
@@ -531,6 +555,7 @@ export class GameScene extends Phaser.Scene {
     this.chute = this.add.image(x, y - 46, 'chute').setDepth(5).setVisible(false);
 
     this.checkpoint = { x, y };
+    this.lastFloorY = y + 20;
   }
 
   createColliders() {
@@ -917,6 +942,7 @@ export class GameScene extends Phaser.Scene {
     if (onFloor) {
       this.lastFloorTime = time;
       this.airJumpUsed = false;
+      this.lastFloorY = body.bottom;
     }
 
     // Таймер этапа идёт, пока игрок играет: пауза и финиш его останавливают.
@@ -937,8 +963,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateAbilityIcons(time);
 
-    // Упала в пропасть
-    if (this.player.y > this.worldH + 120) this.hurt(time, true);
+    // Упала в пропасть: считаем от последней опоры, а не от дна карты.
+    const пределПадения = this.levelData.fallLimit ?? FALL_LIMIT;
+    const улетела = body.top > (this.lastFloorY ?? 0) + пределПадения;
+    if (улетела || this.player.y > this.worldH + 120) this.hurt(time, true);
 
     // Сторож от застревания: капибара внутри блока двигаться не может, и
     // выбраться сама не сумеет — вытаскиваем её наверх.
@@ -1592,37 +1620,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Запланировать валун (ТЗ). Метка «B» ставится там, где игрок побежит;
-   * сам валун срывается с верха склона, поэтому на спуске он догоняет сзади,
-   * а на подъёме катится навстречу — и то, и другое получается само собой.
+   * Запланировать валун. Метка «B» на карте говорит только «здесь бывают
+   * валуны»; сторона выбирается случайно в момент запуска, а катится камень
+   * по тому рельефу, какой есть.
+   *
+   * Раньше сторону определял сам рельеф: искали верх склона и пускали камень
+   * оттуда. Это привязывало валуны к специально нарисованной горке. Теперь
+   * камень приходит просто издалека — сзади или спереди, как повезёт, — и
+   * ступеньки ему не мешают, он по ним прекрасно скатывается.
    */
   planBoulderRun(cx, row, col, сколько) {
-    const слева = this.surfaceRow(col - 4, row);
-    const справа = this.surfaceRow(col + 4, row);
-    // Катится с высокого края на низкий. Ряды считаются сверху, поэтому
-    // меньший ряд — это выше.
-    const dir = слева <= справа ? 1 : -1;
-
-    // Ищем верх склона: идём против хода валуна, пока земля поднимается.
-    let верх = col;
-    let рядВерха = this.surfaceRow(col, row);
-    for (let i = 1; i <= 10; i++) {
-      const c = col - dir * i;
-      const r = this.surfaceRow(c, Math.max(0, row - 8));
-      if (c < 0 || c >= this.cols || r >= this.rows) break; // край или пропасть
-      if (r > рядВерха) break; // земля пошла вниз — склон кончился
-      верх = c;
-      рядВерха = r;
-    }
-
     this.boulderRuns.push({
       x: cx,
-      spawnX: верх * TILE + TILE / 2,
-      spawnY: рядВерха * TILE - 40,
-      dir,
       count: Math.min(сколько, 3),
       fired: false,
     });
+  }
+
+  /** Где под этим столбцом земля, если она вообще есть поблизости. */
+  найтиОпору(col) {
+    for (let d = 0; d <= 8; d++) {
+      for (const c of d === 0 ? [col] : [col - d, col + d]) {
+        const r = this.surfaceRow(c, 0);
+        if (r < this.rows) return { col: c, row: r };
+      }
+    }
+    return null;
   }
 
   /** Валуны: предупреждающая табличка, потом сам камень. */
@@ -1638,12 +1661,23 @@ export class GameScene extends Phaser.Scene {
       if (Math.abs(this.player.x - run.x) > 380) continue;
       run.fired = true;
 
-      // Табличка стоит между игроком и склоном — со стороны, откуда покатится
-      // камень (ТЗ), и дрожит целую секунду, чтобы её точно заметили.
+      // Сторона решается сейчас и вслепую: камень одинаково честно приходит
+      // и в спину, и в лоб.
+      run.dir = Phaser.Math.RND.pick([-1, 1]);
+      const опора = this.найтиОпору(Math.floor((run.x - run.dir * BOULDER_SPAWN_AHEAD) / TILE));
+      if (!опора) {
+        run.count = 0; // ставить камень некуда — там пропасть
+        continue;
+      }
+      run.spawnX = опора.col * TILE + TILE / 2;
+      run.spawnY = опора.row * TILE - 40;
+
+      // Табличка стоит с той стороны, откуда покатится камень (ТЗ), и дрожит
+      // целую секунду, чтобы её точно заметили.
       const знакX = run.x - run.dir * 200;
       const знакРяд = this.surfaceRow(Math.floor(знакX / TILE), 0);
       const знак = this.add
-        .image(знакX, знакРяд * TILE - 31, ['sign', 'sign2', 'sign3'][run.count - 1] || 'sign3')
+        .image(знакX, Math.min(знакРяд, this.rows - 1) * TILE - 31, ['sign', 'sign2', 'sign3'][run.count - 1] || 'sign3')
         .setDepth(4);
       this.tweens.add({ targets: знак, angle: 7, duration: 70, yoyo: true, repeat: 13 });
 
@@ -1834,6 +1868,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
     this.player.setPosition(место.x, место.y);
     this.capy.setPosition(место.x, место.y);
+    this.lastFloorY = место.y + this.player.body.halfHeight;
 
     if (this.lives <= 0) {
       this.failStage();
