@@ -66,9 +66,28 @@ export class LevelSelectScene extends Phaser.Scene {
     return { собрано, всего: этапы.length * 3 };
   }
 
+  /** Сколько этапов маршрута пройдено. Пройденным считается тот, где есть звезда. */
+  routeStages(ri) {
+    const этапы = ROUTES[ri].levels;
+    return { пройдено: этапы.filter((i) => getLevelResult(i).stars > 0).length, всего: этапы.length };
+  }
+
   // ── Экран маршрутов ─────────────────────────────────────────────────────
   showRoutes() {
     this.title(t('routeSelect'));
+
+    const всегоЭтапов = ROUTES.reduce((n, r) => n + r.levels.length, 0);
+    const пройденоВсего = ROUTES.reduce((n, r) => n + this.routeStages(ROUTES.indexOf(r)).пройдено, 0);
+    this.add
+      .text(GAME_WIDTH / 2, 126, `${t('passed')}: ${пройденоВсего} / ${всегоЭтапов}`, {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: '#fff3d0',
+        fontStyle: 'bold',
+        stroke: '#7a4a28',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5);
 
     const gap = 40;
     const cardW = Math.min(300, (GAME_WIDTH - 160 - (ROUTES.length - 1) * gap) / ROUTES.length);
@@ -81,6 +100,7 @@ export class LevelSelectScene extends Phaser.Scene {
       const x = startX + ri * (cardW + gap);
       const открыт = this.routeUnlocked(ri);
       const звёзды = this.routeStars(ri);
+      const этапы = this.routeStages(ri);
 
       panel(this, x, y, cardW, cardH);
 
@@ -109,7 +129,7 @@ export class LevelSelectScene extends Phaser.Scene {
           x,
           y + 6,
           открыт
-            ? `${t('stages')}: ${маршрут.levels.length}\n${t('stars')}: ${звёзды.собрано} / ${звёзды.всего}`
+            ? `${t('stages')}: ${этапы.пройдено} / ${этапы.всего}\n${t('stars')}: ${звёзды.собрано} / ${звёзды.всего}`
             : t('lockedHint'),
           {
             fontFamily: FONT,
@@ -129,7 +149,9 @@ export class LevelSelectScene extends Phaser.Scene {
         cardW - 60,
         66,
         открыт ? t('open') : t('locked'),
-        () => this.scene.start('LevelSelectScene', { route: ri })
+        // Перезапуск сцены с явными данными: scene.start на самой себе данные
+        // не всегда подхватывает, и экран открывался прежний.
+        () => this.scene.restart({ route: ri })
       );
       if (!открыт) btn.setEnabled(false);
     });
@@ -144,6 +166,18 @@ export class LevelSelectScene extends Phaser.Scene {
   showStages(ri) {
     const маршрут = ROUTES[ri];
     this.title(getLanguage() === 'ru' ? маршрут.name : маршрут.nameEn);
+
+    const счёт = this.routeStages(ri);
+    this.add
+      .text(GAME_WIDTH / 2, 126, `${t('passed')}: ${счёт.пройдено} / ${счёт.всего}`, {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: '#fff3d0',
+        fontStyle: 'bold',
+        stroke: '#7a4a28',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5);
 
     const gap = 26;
     const всего = маршрут.levels.length;
@@ -222,7 +256,7 @@ export class LevelSelectScene extends Phaser.Scene {
       200,
       64,
       t('back'),
-      () => this.scene.start('LevelSelectScene'),
+      () => this.scene.restart({ route: null }),
       { fill: COLORS.panel, edge: COLORS.panelEdge }
     );
   }

@@ -1632,7 +1632,10 @@ export class GameScene extends Phaser.Scene {
   surfaceRow(col, отРяда) {
     if (col < 0 || col >= this.cols) return this.rows;
     for (let r = Math.max(0, отРяда); r < this.rows; r++) {
-      if (this.map[r][col] === '#') return r;
+      // Клетка склона тоже опора: без этого валун рождался внутри склона
+      // и гас в первые же кадры, а над самим склоном опоры будто и не было.
+      const ch = this.map[r][col];
+      if (ch === '#' || ch === '/' || ch === '\\') return r;
     }
     return this.rows; // пропасть
   }
@@ -1653,6 +1656,39 @@ export class GameScene extends Phaser.Scene {
       count: Math.min(сколько, 3),
       fired: false,
     });
+  }
+
+  /**
+   * Откуда пустить валун, чтобы он честно докатился до игрока.
+   *
+   * Перебираем обе стороны в случайном порядке и несколько дистанций: ближе
+   * ставим только если издалека путь не годится. Путь годится, когда от места
+   * появления до игрока земля нигде не поднимается выше точки старта и нигде
+   * не прерывается пропастью — иначе камень либо встанет, либо провалится, не
+   * доехав.
+   */
+  выбратьМестоВалуна(целX) {
+    const цельCol = Math.floor(целX / TILE);
+    for (const dir of Phaser.Utils.Array.Shuffle([-1, 1])) {
+      for (const даль of [BOULDER_SPAWN_AHEAD, 700, 520, 380]) {
+        const опора = this.найтиОпору(Math.floor((целX - dir * даль) / TILE));
+        if (!опора) continue;
+        if (!this.путьВниз(опора.col, цельCol, опора.row)) continue;
+        return { dir, col: опора.col, row: опора.row };
+      }
+    }
+    return null;
+  }
+
+  /** Не поднимается ли земля выше старта и не рвётся ли она по дороге. */
+  путьВниз(отCol, доCol, стартРяд) {
+    const шаг = отCol < доCol ? 1 : -1;
+    for (let c = отCol; c !== доCol; c += шаг) {
+      const r = this.surfaceRow(c, 0);
+      if (r >= this.rows) return false; // пропасть: камень провалится
+      if (r < стартРяд) return false; // выше старта: камень не заедет
+    }
+    return true;
   }
 
   /** Где под этим столбцом земля, если она вообще есть поблизости. */
@@ -1679,16 +1715,20 @@ export class GameScene extends Phaser.Scene {
       if (Math.abs(this.player.x - run.x) > 380) continue;
       run.fired = true;
 
-      // Сторона решается сейчас и вслепую: камень одинаково честно приходит
-      // и в спину, и в лоб.
-      run.dir = Phaser.Math.RND.pick([-1, 1]);
-      const опора = this.найтиОпору(Math.floor((run.x - run.dir * BOULDER_SPAWN_AHEAD) / TILE));
-      if (!опора) {
-        run.count = 0; // ставить камень некуда — там пропасть
+      // Сторона выбирается случайно — камень одинаково честно приходит и в
+      // спину, и в лоб. Но годится не любая: вверх камень не едет, он
+      // упирается в склон, гаснет и рассыпается, и игрок видит табличку без
+      // камня. Поэтому проверяем весь путь, а не только его концы: между
+      // камнем и игроком может лежать гребень, и тогда сторона не годится,
+      // даже если начинается высоко.
+      const место = this.выбратьМестоВалуна(run.x);
+      if (!место) {
+        run.count = 0; // прикатиться неоткуда
         continue;
       }
-      run.spawnX = опора.col * TILE + TILE / 2;
-      run.spawnY = опора.row * TILE - 40;
+      run.dir = место.dir;
+      run.spawnX = место.col * TILE + TILE / 2;
+      run.spawnY = место.row * TILE - 40;
 
       // Табличка стоит с той стороны, откуда покатится камень (ТЗ), и дрожит
       // целую секунду, чтобы её точно заметили.
