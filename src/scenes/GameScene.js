@@ -1027,7 +1027,9 @@ export class GameScene extends Phaser.Scene {
     this.refreshWallet();
     this.slingReadyAt = time + this.sling.cooldown;
 
-    const pebble = this.pebbles.create(this.player.x + this.facing * 34, this.player.y - 20, 'pebble');
+    // Точка выстрела на уровне груди: с прежней высоты монетка перелетала
+    // монстров, если подойти к ним вплотную.
+    const pebble = this.pebbles.create(this.player.x + this.facing * 34, this.player.y - 4, 'pebble');
     pebble.setDepth(4);
     pebble.body.setCircle(9, 3, 3);
     // Своя гравитация: на первом уровне монетка падает по дуге, на последнем

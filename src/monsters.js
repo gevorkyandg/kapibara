@@ -155,9 +155,12 @@ export const MONSTERS = {
     ground: false,
     body: { w: 40, h: 30, ox: 9, oy: 12 },
     sight: 460, // замечает издалека, чтобы успеть рассчитать удар
-    diveSpeed: 430,
-    diveAngle: 45, // градусы; можно калибровать, лишь бы доставала
-    aimTolerance: 46, // допуск расчёта, иначе идеальный момент не поймать
+    diveSpeed: 430, // скорость падения; вбок — сколько нужно для попадания
+    // Вилка наклона удара: 0.4 — почти отвесно, 1.7 — очень полого. Внутри
+    // неё оса сама подбирает угол под расстояние, поэтому бьёт и вперёд,
+    // и назад, а не ждёт единственного совпадения.
+    minSlope: 0.4,
+    maxSlope: 1.7,
     hoverAmp: 40, // насколько качается на месте
     hoverMs: 1300,
     warnMs: 400, // столько целится перед броском
@@ -209,16 +212,12 @@ export const MONSTERS = {
 
         m.state = 'dive';
         m.readyAt = time + m.attackEvery;
-
-        const рад = Phaser.Math.DegToRad(m.diveAngle);
-        const vx = Math.cos(рад) * m.diveSpeed * m.aimDir;
-        const vy = Math.sin(рад) * m.diveSpeed;
-        m.setVelocity(vx, vy);
+        m.setVelocity(m.aimVx, m.aimVy);
 
         // Жало смотрит туда же, куда летит оса.
         m.setTexture(m.type.diveKey);
-        m.setFlipY(m.aimDir < 0);
-        m.setRotation(Math.atan2(vy, vx));
+        m.setFlipY(m.aimVx < 0);
+        m.setRotation(Math.atan2(m.aimVy, m.aimVx));
         return;
       }
 
@@ -231,21 +230,27 @@ export const MONSTERS = {
       const глубина = игрок.body.bottom - m.y; // насколько ниже нас капибара
       if (глубина < 60) return; // она выше — бить некуда
 
-      const рад = Phaser.Math.DegToRad(m.diveAngle);
-      const время = глубина / (Math.sin(рад) * m.diveSpeed); // сколько лететь вниз
-      const охват = Math.cos(рад) * m.diveSpeed * время; // на столько сместимся вбок
+      // Вниз оса всегда падает с одной скоростью, а вбок — на сколько нужно.
+      // Раньше угол был жёстко 45°, и оса ждала, пока звёзды сойдутся: чаще
+      // всего момент не наступал вовсе, и она пропускала игрока мимо.
+      const vy = m.diveSpeed;
+      const время = глубина / vy;
 
       // Где капибара окажется к удару, если продолжит бежать как сейчас.
       const прогноз = игрок.x + игрок.body.velocity.x * (m.warnMs / 1000 + время);
       const нужно = прогноз - m.x;
+      const vx = нужно / время;
 
-      // Момент настал, когда нужное смещение совпало с тем, что оса пролетит.
-      if (Math.abs(Math.abs(нужно) - охват) > m.aimTolerance) return;
+      // Слишком полого или слишком отвесно — это уже не удар, а падение.
+      // В таком случае просто ждём: цель либо подойдёт, либо уйдёт.
+      const пологость = Math.abs(vx) / vy;
+      if (пологость > m.maxSlope || пологость < m.minSlope) return;
 
       m.state = 'aim';
       m.aimUntil = time + m.warnMs;
-      m.aimDir = Math.sign(нужно) || 1;
-      m.setFlipX(m.aimDir < 0);
+      m.aimVx = vx;
+      m.aimVy = vy;
+      m.setFlipX(vx < 0);
       scene.tweens.add({ targets: m, scaleX: 1.2, scaleY: 0.85, duration: m.warnMs, yoyo: true });
     },
   },
@@ -264,7 +269,7 @@ export const MONSTERS = {
     hopEvery: 1500,
     sight: 320,
     tongueEvery: 2400,
-    tongueReach: 220, // втрое дальше прежнего
+    tongueReach: 187, // на 15% короче прежнего
     update(scene, m, time) {
       const player = scene.player;
       const dist = Math.abs(player.x - m.x);
@@ -291,6 +296,7 @@ export const MONSTERS = {
     body: { w: 30, h: 104, ox: 12, oy: 14 },
     sight: 300, // издалека замечает
     strikeRange: 190, // на этой дистанции бросается
+    strikeSpeed: 560, // скорость выпада — за 190 мс это больше 100 пикселей
     strikeEvery: 900, // и повторяет броски, пока игрок близко
     outMs: 4200,
     hideMs: 1200,
@@ -331,14 +337,13 @@ export const MONSTERS = {
         m.nextStrikeAt = time + m.strikeEvery;
         const dir = игрок.x < m.x ? -1 : 1;
         m.setFlipX(dir < 0);
-        scene.tweens.add({
-          targets: m,
-          x: m.x + dir * 70,
-          angle: dir * 22,
-          duration: 170,
-          yoyo: true,
-          ease: 'Back.In',
-        });
+        // Бросок делаем скоростью: твин по x физическое тело перебивает,
+        // и от размаха оставалась четверть. Наклон — твином, его физика
+        // не трогает.
+        m.setVelocityX(dir * m.strikeSpeed);
+        scene.tweens.add({ targets: m, angle: dir * 62, duration: 190, yoyo: true });
+        scene.time.delayedCall(190, () => m.active && m.setVelocityX(-dir * m.strikeSpeed));
+        scene.time.delayedCall(380, () => m.active && m.setVelocityX(0));
       }
     },
   },
