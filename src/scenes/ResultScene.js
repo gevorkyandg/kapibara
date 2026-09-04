@@ -42,7 +42,13 @@ export class ResultScene extends Phaser.Scene {
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.5);
     panel(this, GAME_WIDTH / 2, GAME_HEIGHT / 2, 780, 640);
 
-    const title = passed ? t('stageDone') : failedBy === 'lives' ? t('outOfLives') : t('stageFailed');
+    const title = passed
+      ? t('stageDone')
+      : failedBy === 'lives'
+        ? t('outOfLives')
+        : failedBy === 'time'
+          ? t('outOfTime')
+          : t('stageFailed');
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 268, title, {
         fontFamily: FONT,
@@ -124,7 +130,11 @@ export class ResultScene extends Phaser.Scene {
         .text(
           GAME_WIDTH / 2,
           GAME_HEIGHT / 2 + 140,
-          failedBy === 'lives' ? t('outOfLivesHint') : t('failedHint'),
+          failedBy === 'lives'
+            ? t('outOfLivesHint')
+            : failedBy === 'time'
+              ? t('outOfTimeHint')
+              : t('failedHint'),
           { fontFamily: FONT, fontSize: '24px', color: '#b4553f' }
         )
         .setOrigin(0.5);

@@ -132,6 +132,12 @@ export class GameScene extends Phaser.Scene {
     this.lives = this.maxLives;
     this.lostLife = false; // потеря жизни лишает третьей звезды
     this.stageMs = 0;
+
+    // Сколько дано на этап. По умолчанию — вдвое больше, чем нужно, чтобы
+    // пройти его насквозь самым обычным шагом: считается от длины этапа и
+    // базовой скорости, поэтому подгонять руками ничего не нужно.
+    this.timeLimitMs =
+      level.timeMs ?? Math.round((this.worldW / PHYS.walkSpeed) * 2) * 1000;
     this.levelAtStart = getLevel();
 
     // Прибавки за уровень игрока — именно они делают поздние этапы проходимыми.
@@ -409,8 +415,8 @@ export class GameScene extends Phaser.Scene {
           case 'h': {
             // Сердечко: возвращает потерянную жизнь. Качается медленно и
             // еле-еле — так его видно издалека, но оно не мельтешит.
-            const сердце = this.heartDrops.create(cx, cy, 'heart-pickup').setDepth(3);
-            сердце.body.setSize(40, 40).setOffset(6, 6);
+            const сердце = this.heartDrops.create(cx, cy, 'heart').setDepth(3);
+            сердце.body.setSize(36, 34).setOffset(2, 3);
             this.tweens.add({
               targets: сердце,
               y: cy - 7,
@@ -1004,7 +1010,13 @@ export class GameScene extends Phaser.Scene {
 
     // Таймер этапа идёт, пока игрок играет: пауза и финиш его останавливают.
     this.stageMs += delta;
-    this.timerText.setText(formatTime(this.stageMs));
+    const осталось = Math.max(0, this.timeLimitMs - this.stageMs);
+    this.timerText.setText(formatTime(осталось));
+    this.timerText.setColor(осталось < 10000 ? '#ff6b6b' : '#5a3a22');
+    if (осталось <= 0) {
+      this.failStage('time');
+      return;
+    }
 
     this.updateSpring(time);
     this.handleMovement(time, onFloor);
@@ -1370,7 +1382,9 @@ export class GameScene extends Phaser.Scene {
     if (this.chute.visible) this.chute.setPosition(this.player.x, this.player.y - 48);
 
     const vx = Math.abs(this.player.body.velocity.x);
-    const state = !onFloor ? 'air' : vx > 30 ? 'walk' : 'idle';
+    // На пружине состояние фиксируем: без этого «в воздухе» и «на земле»
+    // сменяли друг друга каждый кадр, и капибара мерцала.
+    const state = this.springHold ? 'idle' : !onFloor ? 'air' : vx > 30 ? 'walk' : 'idle';
     this.capy.animate(time, state, vx / this.walkSpeed);
 
     // На ускорении капибара чуть вытягивается вперёд и приседает — видно,
@@ -1516,7 +1530,12 @@ export class GameScene extends Phaser.Scene {
   touchSpring(spring) {
     if (!spring.active || this.finished || this.springHold) return;
     const body = this.player.body;
-    if (body.velocity.y < 0 || body.bottom > spring.body.top + 30) return;
+
+    // Пружина ловит только того, кто на неё падает. Пройти мимо по земле или
+    // задеть боком нельзя: иначе она срабатывает сама по себе, а игрок этого
+    // не просил.
+    if (body.velocity.y < 60) return;
+    if (body.bottom > spring.body.top + 16) return;
 
     // Ставим капибару ровно на пружину: сдвигаем ровно на столько, на
     // сколько ноги провалились ниже её верха. Иначе она оседала до земли.
@@ -2062,7 +2081,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Жизни кончились: этап не пройден, придётся заново (ТЗ). */
-  failStage() {
+  failStage(причина = 'lives') {
     if (this.finished) return;
     this.finished = true;
     this.player.setVelocity(0, 0);
@@ -2076,7 +2095,7 @@ export class GameScene extends Phaser.Scene {
 
     sfx.fail();
     this.showResult(
-      { stars: 0, percent: this.totalCoins ? this.coinsCollected / this.totalCoins : 0, stageXp: 0, failedBy: 'lives' },
+      { stars: 0, percent: this.totalCoins ? this.coinsCollected / this.totalCoins : 0, stageXp: 0, failedBy: причина },
       700
     );
   }
