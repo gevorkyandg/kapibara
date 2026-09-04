@@ -539,6 +539,30 @@ export function createTextures(scene) {
   });
   bake(g, 'sign2', 48, 62);
 
+  // Табличка с ульем: предупреждает не об одной осе, а о целом рое (ТЗ роя).
+  // Улей рисуем полосами-ярусами с летком внизу — так он читается сразу и не
+  // путается с восклицательным знаком.
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(20, 30, 8, 30, 3);
+  g.strokeRoundedRect(20, 30, 8, 30, 3);
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(4, 0xc9922a, 1);
+  g.fillRoundedRect(2, 2, 44, 32, 8);
+  g.strokeRoundedRect(2, 2, 44, 32, 8);
+  g.fillStyle(0xc98a2e, 1);
+  [
+    { y: 9, w: 13 },
+    { y: 15, w: 17 },
+    { y: 21, w: 15 },
+    { y: 27, w: 11 },
+  ].forEach((я) => {
+    g.fillRoundedRect(24 - я.w / 2, я.y, я.w, 5, 2.5);
+  });
+  g.fillStyle(0x5a3a22, 1);
+  g.fillCircle(24, 26, 2.6); // леток
+  bake(g, 'sign-hive', 48, 62);
+
   // Валун: катится по склону, трогать нельзя (ТЗ). Трещина и пятна нужны
   // не для красоты — без них не видно, что камень крутится.
   g.fillStyle(0x9aa3ac, 1);

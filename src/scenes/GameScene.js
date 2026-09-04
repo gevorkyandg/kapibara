@@ -7,6 +7,7 @@ import {
   TREAT_CHANCE,
   LIVES,
   SLOPE_STEPS,
+  HIVE,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
@@ -57,6 +58,10 @@ const SLOPE_STEP = TILE / SLOPE_STEPS;
 
 // Сколько шип дрожит, прежде чем сорваться (ТЗ: «немного трясутся и потом падают»).
 const SPIKE_SHAKE_MS = 380;
+
+// Насколько раньше первой осы стоит табличка улья. Больше дальности зрения
+// осы (460), чтобы предупреждение всегда успевало прийти первым.
+const HIVE_SIGN_AHEAD = 520;
 
 const SPRING_IDLE = 0.8;
 const SPRING_CHARGED = 2;
@@ -343,6 +348,11 @@ export class GameScene extends Phaser.Scene {
             this.dropSpikes.push({ шип, state: 'hang', точный: ch === 'V' });
             break;
           }
+
+          case 'H':
+            // Улей: одна метка разворачивает целый рой ос.
+            this.buildHive(cx, cy);
+            break;
 
           case 'P':
             this.startPos = { x: cx, y: cy };
@@ -1482,6 +1492,51 @@ export class GameScene extends Phaser.Scene {
 
     this.player.y -= подъём;
     this.player.x += dir * 2;
+  }
+
+  /**
+   * Улей (ТЗ роя). Одна оса — это одна оса; улей ставится одной меткой «H» и
+   * разворачивает стандартный рой из шести. Перед ним всегда стоит табличка с
+   * рисунком улья: игрок должен понимать, во что бежит, до того как влетит.
+   *
+   * Осы висят в два ряда со сдвигом, а готовность к удару у каждой своя —
+   * иначе шесть ос срываются залпом и уклониться нечем. Со сдвигом получается
+   * очередь: пока уворачиваешься от первой, заходит следующая.
+   *
+   * Сложность этапа задаёт поле hive: число ос и шаг между ними.
+   */
+  buildHive(cx, cy) {
+    const набор = { ...HIVE, ...(this.levelData.hive || {}) };
+
+    // Раскладываем рой в два ряда со сдвигом: так осы не висят шеренгой и
+    // заходят по очереди с разных высот.
+    const вРяду = Math.ceil(набор.count / 2);
+    const места = [];
+    for (let i = 0; i < набор.count; i++) {
+      const ряд = i < вРяду ? 0 : 1;
+      const место = ряд === 0 ? i : i - вРяду;
+      const всегоВРяду = ряд === 0 ? вРяду : набор.count - вРяду;
+      const x = cx + (место - (всегоВРяду - 1) / 2) * набор.dx + (ряд ? набор.dx / 2 : 0);
+      места.push({ x, y: cy + ряд * набор.dy, номер: i });
+    }
+
+    // Табличка стоит перед роем — и с запасом от края, а не от середины.
+    // Иначе она оказывалась ближе к первой осе, чем дальность её зрения, и
+    // предупреждение приходило после атаки.
+    const край = Math.min(...места.map((м) => м.x));
+    const знакX = край - HIVE_SIGN_AHEAD;
+    const знакРяд = this.surfaceRow(Math.floor(знакX / TILE), 0);
+    if (знакX > 40 && знакРяд < this.rows) {
+      this.add.image(знакX, знакРяд * TILE - 31, 'sign-hive').setDepth(1);
+    }
+
+    for (const м of места) {
+      if (м.x < 40 || м.x > this.worldW - 40) continue;
+      const оса = this.addMonster('w', м.x, м.y);
+      // У каждой осы своя готовность: шесть залпом — это не бой, а стена.
+      оса.readyAt = м.номер * набор.delayMs;
+      оса.hoverMs += м.номер * 90;
+    }
   }
 
   /** Ряд верхней твёрдой клетки в столбце, считая от ряда «откуда смотрим». */
