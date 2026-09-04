@@ -54,7 +54,11 @@ const TREATS = [
  * прыжок) и на сколько подбрасывает — с нажатием и без него. Высоты заданы
  * долями от обычного прыжка капибары.
  */
-const SPRING_WINDOW = 260;
+// Сколько пружина сжимается, прежде чем выстрелить, и насколько заранее
+// засчитывается нажатый прыжок. Оба срока укорочены на пятую часть: с
+// прежними пружина ощущалась вязкой.
+const SPRING_WINDOW = 208;
+const SPRING_BUFFER = 104;
 // Высота одной ступеньки склона. Чем их больше в клетке, тем мельче шаг и
 // тем ровнее выглядит скат.
 const SLOPE_STEP = TILE / SLOPE_STEPS;
@@ -204,6 +208,8 @@ export class GameScene extends Phaser.Scene {
     this.hazards = []; // прямоугольники шипов: проверяем их вручную, так проще
     this.pebbles = this.physics.add.group(); // монетки из рогатки
     this.springs = this.physics.add.staticGroup(); // пружины
+    // Имя hearts занято сердечками в углу экрана, поэтому подбираемые — свои.
+    this.heartDrops = this.physics.add.group({ allowGravity: false, immovable: true });
     this.cloudlets = this.physics.add.staticGroup(); // облачка
     this.fallers = this.physics.add.staticGroup(); // падающие платформы
     this.movers = this.physics.add.group(); // движущиеся платформы
@@ -305,10 +311,18 @@ export class GameScene extends Phaser.Scene {
           }
 
           case 's': {
-            // Пружина: подбрасывает вдвое выше обычного прыжка.
-            const spring = this.springs.create(cx, top + TILE - 28, 'spring');
+            // Пружина: подбрасывает вдвое выше обычного прыжка. Подставка —
+            // физическое тело, спираль — отдельная картинка поверх: сжимается
+            // только она, а подставка стоит на месте.
+            const пол = top + TILE;
+            const spring = this.springs.create(cx, пол, 'spring-base').setOrigin(0.5, 1);
             spring.setDepth(2);
-            spring.body.setSize(50, 30).setOffset(5, 12);
+            spring.body.setSize(50, 44).setOffset(5, -42);
+            spring.refreshBody();
+            spring.coil = this.add
+              .image(cx, пол - 16, 'spring-coil')
+              .setOrigin(0.5, 1)
+              .setDepth(2);
             break;
           }
 
@@ -391,6 +405,22 @@ export class GameScene extends Phaser.Scene {
             // Улей: одна метка разворачивает целый рой ос.
             this.buildHive(cx, cy);
             break;
+
+          case 'h': {
+            // Сердечко: возвращает потерянную жизнь. Качается медленно и
+            // еле-еле — так его видно издалека, но оно не мельтешит.
+            const сердце = this.heartDrops.create(cx, cy, 'heart-pickup').setDepth(3);
+            сердце.body.setSize(40, 40).setOffset(6, 6);
+            this.tweens.add({
+              targets: сердце,
+              y: cy - 7,
+              duration: 1500,
+              yoyo: true,
+              repeat: -1,
+              ease: 'Sine.easeInOut',
+            });
+            break;
+          }
 
           case 'P':
             this.startPos = { x: cx, y: cy };
@@ -590,6 +620,7 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(this.player, this.coins, (_p, coin) => this.collectCoin(coin));
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
+    this.physics.add.overlap(this.player, this.heartDrops, (_p, h) => this.collectHeart(h));
     this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now));
     // Валун только задевает — оттолкнуть игрока он не должен, иначе им можно
     // проехаться до финиша.
@@ -1208,6 +1239,21 @@ export class GameScene extends Phaser.Scene {
     звук();
   }
 
+  /**
+   * Подобрать сердечко. Берётся только когда жизнь и правда потеряна: с
+   * полным здоровьем оно остаётся лежать, чтобы игрок вернулся за ним, когда
+   * припечёт.
+   */
+  collectHeart(сердце) {
+    if (!сердце.active || this.lives >= this.maxLives) return;
+    сердце.disableBody(true, true);
+    this.lives += 1;
+    this.updateHearts();
+    sfx.treat();
+    this.puff(сердце.x, сердце.y, 0xff5d7a);
+    this.floatLabel(сердце.x, сердце.y, '+1');
+  }
+
   /** Дикобраз выпускает иглы во все стороны (ТЗ). */
   shootQuills(m) {
     this.soundAt(m.x, sfx.pop);
@@ -1462,6 +1508,11 @@ export class GameScene extends Phaser.Scene {
    *
    * Окно в SPRING_WINDOW мс: не мгновение, но и не «жми когда хочешь».
    */
+  /** Видимый верх спирали: он опускается, пока пружина сжимается. */
+  верхПружины(spring) {
+    return spring.coil ? spring.coil.y - spring.coil.displayHeight : spring.body.top;
+  }
+
   touchSpring(spring) {
     if (!spring.active || this.finished || this.springHold) return;
     const body = this.player.body;
@@ -1470,18 +1521,19 @@ export class GameScene extends Phaser.Scene {
     // Ставим капибару ровно на пружину: сдвигаем ровно на столько, на
     // сколько ноги провалились ниже её верха. Иначе она оседала до земли.
     this.player.setVelocityY(0);
-    this.player.y += spring.body.top - body.bottom;
+    this.player.y += this.верхПружины(spring) - body.bottom;
 
     this.springHold = {
       spring,
       until: this.time.now + SPRING_WINDOW,
       // Нажатый прямо перед касанием прыжок тоже засчитываем — иначе
       // попадание требовало бы ювелирной точности.
-      charged: this.time.now - this.jumpBufferedAt < 130,
+      charged: this.time.now - this.jumpBufferedAt < SPRING_BUFFER,
     };
 
     sfx.land();
-    this.tweens.add({ targets: spring, scaleY: 0.55, duration: SPRING_WINDOW, ease: 'Sine.easeOut' });
+    // Сжатие ведём вручную в updateSpring: твин на той же спирали спорил сам
+    // с собой при повторных касаниях, и пружина едва проседала.
   }
 
   /** Пока пружина сжата: ловим нажатие прыжка и отпускаем в конце окна. */
@@ -1494,17 +1546,23 @@ export class GameScene extends Phaser.Scene {
     // капибара оседала внутрь пружины.
     this.player.setVelocityY(0);
     if (hold.spring.active) {
-      this.player.y += hold.spring.body.top - this.player.body.bottom;
+      // Спираль садится ровно по ходу окна, от целой до 0.55.
+      const доля = Phaser.Math.Clamp(1 - (hold.until - time) / SPRING_WINDOW, 0, 1);
+      hold.spring.coil?.setScale(1, 1 - 0.45 * доля);
+
+      // Держимся за видимый верх спирали, а не за неподвижное тело: пружина
+      // проседает, и капибара проседает вместе с ней.
+      this.player.y += this.верхПружины(hold.spring) - this.player.body.bottom;
     }
 
-    if (time - this.jumpBufferedAt < 130) hold.charged = true;
+    if (time - this.jumpBufferedAt < SPRING_BUFFER) hold.charged = true;
     if (time < hold.until) return;
 
     this.springHold = null;
     this.jumpBufferedAt = -9999;
 
     if (hold.spring.active) {
-      this.tweens.add({ targets: hold.spring, scaleY: 1, duration: 160, ease: 'Back.Out' });
+      this.tweens.add({ targets: hold.spring.coil, scaleY: 1, duration: 128, ease: 'Back.Out' });
     }
     // Нажал вовремя — двойная высота, не нажал — мягкий подскок.
     this.launch(hold.charged ? SPRING_CHARGED : SPRING_IDLE);

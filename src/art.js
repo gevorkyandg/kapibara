@@ -701,24 +701,30 @@ export function createTextures(scene) {
   g.fillEllipse(57, 15, 10, 10);
   bake(g, 'campfire-logs', 68, 26);
 
-  // Пружина: сжатая спираль на подставке, даёт двойной прыжок вверх
+  // Пружина — двумя картинками, как костёр: подставка стоит на месте, а
+  // сжимается только спираль. Одной картинкой не выходит: масштаб по высоте
+  // тянет и подставку, и она уезжает из-под пружины.
   g.fillStyle(0x9aa7b4, 1);
   g.lineStyle(4, 0x5f6b78, 1);
-  g.fillRoundedRect(6, 40, 48, 12, 5);
-  g.strokeRoundedRect(6, 40, 48, 12, 5);
+  g.fillRoundedRect(6, 2, 48, 12, 5);
+  g.strokeRoundedRect(6, 2, 48, 12, 5);
+  bake(g, 'spring-base', 60, 16);
+
+  // Спираль с розовой пяткой наверху. Рисуется снизу вверх, чтобы при сжатии
+  // низ оставался на подставке.
   g.lineStyle(6, 0xd8dee6, 1);
   g.beginPath();
-  g.moveTo(14, 38);
+  g.moveTo(14, 40);
   for (let i = 0; i < 3; i++) {
-    g.lineTo(46, 32 - i * 8);
-    g.lineTo(14, 26 - i * 8);
+    g.lineTo(46, 34 - i * 8);
+    g.lineTo(14, 28 - i * 8);
   }
   g.strokePath();
   g.fillStyle(0xff8fa3, 1);
   g.lineStyle(4, 0xc2506a, 1);
   g.fillRoundedRect(8, 2, 44, 12, 6);
   g.strokeRoundedRect(8, 2, 44, 12, 6);
-  bake(g, 'spring', 60, 56);
+  bake(g, 'spring-coil', 60, 42);
 
   // Облачко: мягкая ступенька, которая лопается после касания
   g.fillStyle(0xffffff, 1);
@@ -810,6 +816,17 @@ export function createTextures(scene) {
 
   heart(20, 18, 1, 0xe0454f, 0x9c2b33);
   bake(g, 'heart', 40, 40);
+
+  // Сердечко-подбор: то же самое, только крупнее — его берут с земли, а не
+  // читают в углу экрана.
+  g.fillStyle(0xff5d7a, 1);
+  g.lineStyle(4, 0xc2506a, 1);
+  g.fillCircle(17, 17, 12);
+  g.fillCircle(35, 17, 12);
+  g.fillTriangle(4, 22, 48, 22, 26, 47);
+  g.fillStyle(0xffa8b8, 1);
+  g.fillCircle(15, 14, 4.5);
+  bake(g, 'heart-pickup', 52, 52);
 
   heart(20, 18, 1, 0x8b8178, 0x5f574f);
   bake(g, 'heart-empty', 40, 40);
