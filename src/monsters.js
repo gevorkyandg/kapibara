@@ -124,9 +124,22 @@ export const MONSTERS = {
     speed: 0,
     shootEvery: 2200, // на 10% реже прежнего
     warnMs: 500,
+    sight: 640, // полэкрана: дальше иглы всё равно не долетают
     update(scene, m, time) {
       m.setVelocityX(0);
       if (!m.nextShotAt) m.nextShotAt = time + m.shootEvery;
+
+      // Пока игрок далеко — не стреляем вовсе. Раньше дикобраз палил всегда,
+      // где бы игрок ни находился, и на этапе с тремя дикобразами это было
+      // слышно с самого старта: три выстрела разом каждые 2.2 секунды,
+      // ровным метрономом. Таймер при этом двигаем вперёд, чтобы первый
+      // выстрел после подхода игрока начинался с обычного раздувания, а не
+      // прилетал мгновенно.
+      if (Math.abs(scene.player.x - m.x) > m.sight) {
+        m.nextShotAt = time + m.shootEvery;
+        m.warning = false;
+        return;
+      }
 
       // Раздувается — сигнал, что сейчас стрельнёт
       if (!m.warning && time >= m.nextShotAt - m.warnMs) {

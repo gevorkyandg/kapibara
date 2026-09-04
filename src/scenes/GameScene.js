@@ -64,6 +64,10 @@ const SPIKE_SHAKE_MS = 380;
 // осы (460), чтобы предупреждение всегда успевало прийти первым.
 const HIVE_SIGN_AHEAD = 520;
 
+// Дальше этого события в мире не слышно. Без такой границы монстр с другого
+// конца этапа звучит ровно так же громко, как стоящий рядом.
+const EARSHOT = 900;
+
 const SPRING_IDLE = 0.8;
 const SPRING_CHARGED = 2;
 
@@ -1134,9 +1138,18 @@ export class GameScene extends Phaser.Scene {
     this.flyers.children.iterate(шаг);
   }
 
+  /**
+   * Звук события в мире: слышно только то, что происходит рядом с героем.
+   * Синтезатор не умеет расстояний, поэтому границу ставим сами.
+   */
+  soundAt(x, звук) {
+    if (Math.abs(x - this.player.x) > EARSHOT) return;
+    звук();
+  }
+
   /** Дикобраз выпускает иглы во все стороны (ТЗ). */
   shootQuills(m) {
-    sfx.pop();
+    this.soundAt(m.x, sfx.pop);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       const quill = this.quills.create(m.x + Math.cos(a) * 30, m.y + Math.sin(a) * 30, 'quill');
@@ -1160,7 +1173,7 @@ export class GameScene extends Phaser.Scene {
     tongue.displayHeight = 13;
     tongue.displayWidth = 8;
     this.tongues.push(tongue);
-    sfx.pop();
+    this.soundAt(m.x, sfx.pop);
 
     this.tweens.add({
       targets: tongue,
