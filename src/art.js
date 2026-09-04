@@ -521,6 +521,56 @@ export function createTextures(scene) {
   g.fillCircle(24, 28, 3.4);
   bake(g, 'sign', 48, 62);
 
+  // Та же табличка, но с двумя знаками: столько валунов скатится подряд (ТЗ).
+  g.fillStyle(0x8d6b4b, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(20, 30, 8, 30, 3);
+  g.strokeRoundedRect(20, 30, 8, 30, 3);
+  g.fillStyle(0xffd451, 1);
+  g.lineStyle(4, 0xc9922a, 1);
+  g.fillRoundedRect(2, 2, 44, 32, 8);
+  g.strokeRoundedRect(2, 2, 44, 32, 8);
+  g.fillStyle(0x5a3a22, 1);
+  [15, 29].forEach((x) => {
+    g.fillRoundedRect(x - 3, 8, 6, 15, 3);
+    g.fillCircle(x, 28, 3.4);
+  });
+  bake(g, 'sign2', 48, 62);
+
+  // Валун: катится по склону, трогать нельзя (ТЗ). Трещина и пятна нужны
+  // не для красоты — без них не видно, что камень крутится.
+  g.fillStyle(0x9aa3ac, 1);
+  g.lineStyle(4, 0x5f6a75, 1);
+  g.fillCircle(30, 30, 27);
+  g.strokeCircle(30, 30, 27);
+  g.fillStyle(0x7f8993, 1);
+  g.fillCircle(20, 22, 7);
+  g.fillCircle(38, 36, 9);
+  g.fillCircle(24, 41, 5);
+  g.lineStyle(3, 0x5f6a75, 1);
+  g.beginPath();
+  g.moveTo(12, 26);
+  g.lineTo(22, 31);
+  g.lineTo(16, 38);
+  g.strokePath();
+  g.fillStyle(0xb6bec6, 1);
+  g.fillCircle(38, 19, 5); // блик, чтобы камень не выглядел плоским
+  bake(g, 'boulder', 60, 60);
+
+  // Шип, свисающий с потолка пещеры (ТЗ): широкое основание, острый низ.
+  g.fillStyle(0xb9c4cf, 1);
+  g.lineStyle(3, 0x6b7885, 1);
+  const сосулька = [
+    { x: 3, y: 2 },
+    { x: 33, y: 2 },
+    { x: 18, y: 50 },
+  ];
+  g.fillPoints(сосулька, true);
+  g.strokePoints(сосулька, true);
+  g.fillStyle(0x8e9aa6, 1);
+  g.fillTriangle(18, 2, 33, 2, 18, 34); // тень с одной стороны — объём
+  bake(g, 'spike-hang', 36, 52);
+
   // Ходячий монстрик: круглый и улыбчивый — «нестрашный».
   g.fillStyle(0x8ed081, 1);
   g.lineStyle(4, 0x3f7a3a, 1);

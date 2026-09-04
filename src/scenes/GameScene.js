@@ -50,6 +50,9 @@ const TREATS = [
  * долями от обычного прыжка капибары.
  */
 const SPRING_WINDOW = 260;
+// Сколько шип дрожит, прежде чем сорваться (ТЗ: «немного трясутся и потом падают»).
+const SPIKE_SHAKE_MS = 380;
+
 const SPRING_IDLE = 0.8;
 const SPRING_CHARGED = 2;
 
@@ -62,6 +65,7 @@ export class GameScene extends Phaser.Scene {
   create(data) {
     this.levelIndex = data?.levelIndex ?? 0;
     const level = LEVELS[this.levelIndex];
+    this.levelData = level;
     this.themeIndex = level.theme;
 
     this.map = buildLevelMap(this.levelIndex);
@@ -163,6 +167,9 @@ export class GameScene extends Phaser.Scene {
     this.movers = this.physics.add.group(); // движущиеся платформы
     this.quills = this.physics.add.group(); // иглы дикобраза
     this.tongues = []; // языки жаб: обычные картинки, попадание считаем сами
+    this.boulders = this.physics.add.group(); // катящиеся валуны
+    this.boulderRuns = []; // места, где валун сорвётся, когда игрок подойдёт
+    this.dropSpikes = []; // шипы, свисающие с потолка пещеры
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
@@ -287,6 +294,26 @@ export class GameScene extends Phaser.Scene {
             // дальше без разгона или способности не перепрыгнуть.
             this.add.image(cx, top + TILE - 31, 'sign').setDepth(1);
             break;
+
+          case 'B': {
+            // Валун (ТЗ, с 4-го уровня). Метка ставится на склоне; сам валун
+            // сорвётся сверху, когда игрок подойдёт. Две метки подряд — два
+            // валуна, между ними можно встать.
+            if (col > 0 && this.map[row][col - 1] === 'B') break; // уже учли
+            let сколько = 1;
+            while (col + сколько < this.cols && this.map[row][col + сколько] === 'B') сколько++;
+            this.planBoulderRun(cx, row, col, сколько);
+            break;
+          }
+
+          case 'v':
+          case 'V': {
+            // Шип с потолка пещеры (ТЗ): подрожит и падает. Заглавная «V» —
+            // тот, что срывается точно под ноги бегущему без остановки.
+            const шип = this.add.image(cx, top, 'spike-hang').setOrigin(0.5, 0).setDepth(2);
+            this.dropSpikes.push({ шип, state: 'hang', точный: ch === 'V' });
+            break;
+          }
 
           case 'P':
             this.startPos = { x: cx, y: cy };
@@ -463,6 +490,10 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, (_p, coin) => this.collectCoin(coin));
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
     this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now));
+    // Валун только задевает — оттолкнуть игрока он не должен, иначе им можно
+    // проехаться до финиша.
+    this.physics.add.overlap(this.player, this.boulders, () => this.hurt(this.time.now));
+    this.physics.add.collider(this.boulders, this.solids);
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
     // Платформы, по которым можно ходить
@@ -844,8 +875,11 @@ export class GameScene extends Phaser.Scene {
 
     this.updateSpring(time);
     this.handleMovement(time, onFloor);
+    this.stepUpSlope(onFloor);
     this.updateMonsters(time);
     this.rideMovers();
+    this.updateBoulders(time, delta);
+    this.updateDropSpikes(time, delta);
     this.updateHazards();
     this.updateCapyVisual(time, onFloor);
     if (this.auraRings?.length) {
@@ -1372,6 +1406,216 @@ export class GameScene extends Phaser.Scene {
         });
       },
     });
+  }
+
+  /**
+   * Шаг на ступеньку в одну клетку.
+   *
+   * Склоны из ТЗ в карте — это лесенка из клеток, а Arcade сам через уступ не
+   * переступает: капибара упирается в 60-пиксельный порог и встаёт намертво.
+   * Прыгать на каждой ступеньке — не склон, а полоса препятствий, поэтому
+   * поднимаем сами: если впереди ровно одна клетка и над ней свободно, герой
+   * заходит на неё с ходу. Выше клетки уступ так и остаётся препятствием.
+   */
+  stepUpSlope(onFloor) {
+    if (!onFloor) return;
+    const тело = this.player.body;
+    const vx = тело.velocity.x;
+    if (Math.abs(vx) < 20) return;
+    const dir = Math.sign(vx);
+    if (!(dir > 0 ? тело.blocked.right : тело.blocked.left)) return;
+
+    const впереди = this.player.x + dir * (тело.halfWidth + 6);
+    const низ = тело.bottom - 4;
+    if (!this.isSolidAtPixel(впереди, низ)) return; // упёрлись не в ступеньку
+    if (this.isSolidAtPixel(впереди, низ - TILE)) return; // стена выше клетки
+
+    const подъём = тело.bottom - Math.floor(низ / TILE) * TILE;
+    if (подъём > TILE + 4) return;
+    if (this.overlapsSolid(this.player.x + dir * 4, this.player.y - подъём)) return;
+
+    this.player.y -= подъём;
+    this.player.x += dir * 4;
+  }
+
+  /** Ряд верхней твёрдой клетки в столбце, считая от ряда «откуда смотрим». */
+  surfaceRow(col, отРяда) {
+    if (col < 0 || col >= this.cols) return this.rows;
+    for (let r = Math.max(0, отРяда); r < this.rows; r++) {
+      if (this.map[r][col] === '#') return r;
+    }
+    return this.rows; // пропасть
+  }
+
+  /**
+   * Запланировать валун (ТЗ). Метка «B» ставится там, где игрок побежит;
+   * сам валун срывается с верха склона, поэтому на спуске он догоняет сзади,
+   * а на подъёме катится навстречу — и то, и другое получается само собой.
+   */
+  planBoulderRun(cx, row, col, сколько) {
+    const слева = this.surfaceRow(col - 4, row);
+    const справа = this.surfaceRow(col + 4, row);
+    // Катится с высокого края на низкий. Ряды считаются сверху, поэтому
+    // меньший ряд — это выше.
+    const dir = слева <= справа ? 1 : -1;
+
+    // Ищем верх склона: идём против хода валуна, пока земля поднимается.
+    let верх = col;
+    let рядВерха = this.surfaceRow(col, row);
+    for (let i = 1; i <= 10; i++) {
+      const c = col - dir * i;
+      const r = this.surfaceRow(c, Math.max(0, row - 8));
+      if (c < 0 || c >= this.cols || r >= this.rows) break; // край или пропасть
+      if (r > рядВерха) break; // земля пошла вниз — склон кончился
+      верх = c;
+      рядВерха = r;
+    }
+
+    this.boulderRuns.push({
+      x: cx,
+      spawnX: верх * TILE + TILE / 2,
+      spawnY: рядВерха * TILE - 40,
+      dir,
+      count: Math.min(сколько, 2),
+      fired: false,
+    });
+  }
+
+  /** Валуны: предупреждающая табличка, потом сам камень. */
+  updateBoulders(time, delta) {
+    const настройки = this.levelData.boulder || {};
+    const масштаб = настройки.scale ?? 1;
+    const скорость = настройки.speed ?? 300;
+
+    for (const run of this.boulderRuns) {
+      if (run.fired) continue;
+      if (Math.abs(this.player.x - run.x) > 380) continue;
+      run.fired = true;
+
+      // Табличка стоит между игроком и склоном — со стороны, откуда покатится
+      // камень (ТЗ), и дрожит целую секунду, чтобы её точно заметили.
+      const знакX = run.x - run.dir * 200;
+      const знакРяд = this.surfaceRow(Math.floor(знакX / TILE), 0);
+      const знак = this.add
+        .image(знакX, знакРяд * TILE - 31, run.count > 1 ? 'sign2' : 'sign')
+        .setDepth(4);
+      this.tweens.add({ targets: знак, angle: 7, duration: 70, yoyo: true, repeat: 13 });
+
+      for (let i = 0; i < run.count; i++) {
+        // Второй камень идёт следом, но не вплотную: между ними есть щель,
+        // в которой можно устоять и отпрыгнуть (ТЗ).
+        this.time.delayedCall(1000 + i * 460, () => {
+          if (this.finished) return;
+          this.spawnBoulder(run, масштаб, скорость);
+        });
+      }
+      this.time.delayedCall(1000 + run.count * 460, () => знак.destroy());
+    }
+
+    // Катящиеся камни: держим их прижатыми к склону, крутим по пройденному
+    // пути и убираем, когда отработали.
+    const dt = delta / 1000;
+    this.boulders.getChildren().forEach((b) => {
+      if (!b.active) return;
+
+      // Склон в карте — лесенка из клеток. Если пустить камень свободно, он
+      // на каждой ступеньке подлетает и встречает игрока на уровне головы,
+      // так что перепрыгнуть его честно нельзя. Поэтому ведём его по самой
+      // поверхности: вверх подхватываем сразу, вниз опускаем плавно — и над
+      // пропастью он падает, а не парит.
+      const рядПод = this.surfaceRow(Math.floor(b.x / TILE), Math.floor(b.y / TILE));
+      const надо = рядПод * TILE - b.body.bottom;
+      b.y += надо < 0 ? надо : Math.min(надо, 1100 * dt);
+
+      b.rotation += ((b.body.velocity.x * delta) / 1000 / 27) * (1 / масштаб);
+      const застрял = b.body.blocked.left || b.body.blocked.right;
+      const ушёл = b.x < -80 || b.x > this.worldW + 80 || b.y > this.worldH + 120;
+      if (застрял || ушёл || time - b.born > 9000) {
+        if (!ушёл) this.puff(b.x, b.y, 0x9aa3ac);
+        b.destroy();
+      }
+    });
+  }
+
+  spawnBoulder(run, масштаб, скорость) {
+    const b = this.boulders.create(run.spawnX, run.spawnY, 'boulder');
+    b.setDepth(3).setScale(масштаб);
+    b.body.setCircle(27, 3, 3);
+    b.body.setAllowGravity(false); // высоту ведём сами, по поверхности склона
+    // Без отскока: подпрыгивая на ступенях, камень оказывался на уровне
+    // головы, и перепрыгнуть его на подъёме было нечестно.
+    b.setBounce(0);
+    b.setVelocityX(run.dir * скорость);
+    b.born = this.time.now;
+    this.puff(b.x, b.y, 0xb6bec6);
+  }
+
+  /**
+   * Падающие шипы в пещерах (ТЗ). Шип срывается так, чтобы прийтись ровно на
+   * бегущего без остановки: время падения умножаем на обычную скорость бега.
+   * Поэтому уйти можно двумя способами — притормозить или включить ускорение,
+   * и оба честно работают. Насколько раньше падает шип, задаёт этап полем
+   * spikeLead: 1 — точно под ноги, больше — падает впереди, и его видно.
+   */
+  updateDropSpikes(time, delta) {
+    const поУмолчанию = this.levelData.spikeLead ?? 1.35;
+    const b = this.player.body;
+    const игрок = new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height);
+
+    for (const s of this.dropSpikes) {
+      const шип = s.шип;
+      if (!шип.active) continue;
+
+      if (s.state === 'hang') {
+        const пол = this.surfaceRow(Math.floor(шип.x / TILE), Math.floor(шип.y / TILE));
+        s.полY = пол * TILE;
+        const высота = Math.max(60, s.полY - (шип.y + шип.height));
+        const времяПадения = Math.sqrt((2 * высота) / PHYS.gravity);
+        // Запас 1 — шип приходит ровно на бегущего, больше — падает впереди.
+        const запас = s.точный ? 1 : поУмолчанию;
+        const дистанция = this.walkSpeed * (SPIKE_SHAKE_MS / 1000 + времяПадения) * запас;
+        if (Math.abs(this.player.x - шип.x) > дистанция) continue;
+
+        s.state = 'shake';
+        // Дрожание — только картинка. Момент срыва отсчитывает таймер: время
+        // тряски заложено в расчёт дистанции, и оно должно совпадать точно,
+        // а у твина своя арифметика повторов.
+        this.tweens.add({
+          targets: шип,
+          x: шип.x + 3,
+          duration: SPIKE_SHAKE_MS / 8,
+          yoyo: true,
+          repeat: -1,
+        });
+        this.time.delayedCall(SPIKE_SHAKE_MS, () => {
+          if (!шип.active) return;
+          this.tweens.killTweensOf(шип);
+          s.state = 'fall';
+          s.vy = 0;
+        });
+        continue;
+      }
+
+      if (s.state === 'fall') {
+        const dt = delta / 1000;
+        s.vy = Math.min(s.vy + PHYS.gravity * dt, PHYS.maxFallSpeed);
+        шип.y += s.vy * dt;
+
+        if (Phaser.Geom.Intersects.RectangleToRectangle(игрок, шип.getBounds())) {
+          this.hurt(time);
+          s.state = 'done';
+          this.puff(шип.x, шип.y + шип.height, 0xb9c4cf);
+          шип.destroy();
+          continue;
+        }
+
+        if (шип.y + шип.height >= s.полY) {
+          s.state = 'done';
+          this.puff(шип.x, s.полY - 10, 0xb9c4cf);
+          шип.destroy();
+        }
+      }
+    }
   }
 
   /**
