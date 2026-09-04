@@ -43,6 +43,15 @@ const TREATS = [
   { key: 'treat-cake', xp: XP.treat.cake },
 ];
 
+/**
+ * Пружина: сколько миллисекунд она сжимается (в это окно надо успеть нажать
+ * прыжок) и на сколько подбрасывает — с нажатием и без него. Высоты заданы
+ * долями от обычного прыжка капибары.
+ */
+const SPRING_WINDOW = 260;
+const SPRING_IDLE = 0.8;
+const SPRING_CHARGED = 2;
+
 /** Сама игра: один уровень от старта до флага. */
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -93,6 +102,7 @@ export class GameScene extends Phaser.Scene {
     this.doubleJumpReadyAt = 0;
     this.boostUntil = 0;
     this.boostReadyAt = 0;
+    this.springHold = null; // пока сжата пружина — держим капибару на ней
     this.cloakActive = false;
     this.cloakUntil = 0;
     this.cloakReadyAt = 0;
@@ -210,7 +220,7 @@ export class GameScene extends Phaser.Scene {
 
           case '~': {
             // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).
-            const fire = this.add.image(cx, top + TILE - 28, 'campfire').setDepth(2);
+            const fire = this.add.image(cx, top + TILE - 34, 'campfire').setDepth(2);
             this.tweens.add({
               targets: fire,
               scaleY: 1.12,
@@ -220,7 +230,7 @@ export class GameScene extends Phaser.Scene {
               repeat: -1,
               ease: 'Sine.easeInOut',
             });
-            this.hazards.push(new Phaser.Geom.Rectangle(cx - 24, top + TILE - 46, 48, 46));
+            this.hazards.push(new Phaser.Geom.Rectangle(cx - 22, top + TILE - 50, 44, 50));
             break;
           }
 
@@ -380,7 +390,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.walkers, this.movers);
 
     // Подкидывающие: срабатывают, когда капибара падает на них сверху
-    this.physics.add.overlap(this.player, this.springs, (_p, spring) => this.bounce(spring, 2));
+    this.physics.add.overlap(this.player, this.springs, (_p, spring) => this.touchSpring(spring));
     this.physics.add.overlap(this.player, this.cloudlets, (_p, cloud) =>
       this.bounce(cloud, 1.2, true)
     );
@@ -751,6 +761,7 @@ export class GameScene extends Phaser.Scene {
     this.stageMs += delta;
     this.timerText.setText(formatTime(this.stageMs));
 
+    this.updateSpring(time);
     this.handleMovement(time, onFloor);
     this.updateWalkers();
     this.rideMovers();
@@ -795,6 +806,14 @@ export class GameScene extends Phaser.Scene {
       this.touch.jumpQueued = false;
     }
 
+    // Пока пружина сжата, нажатие прыжка только заряжает её. Иначе то же
+    // нажатие тут же тратилось бы на двойной прыжок и гасило выстрел.
+    if (this.springHold) {
+      this.player.setVelocityX(0);
+      this.boosting = false;
+      return;
+    }
+
     // Ускорение
     const boostPressed = k.SHIFT.isDown || this.touch.boost;
     if (
@@ -813,12 +832,20 @@ export class GameScene extends Phaser.Scene {
     const boosting = time < this.boostUntil;
     const speed = this.walkSpeed * (boosting ? this.boost.multiplier : 1);
 
+    // Стоим на движущейся платформе — её скорость становится нашей опорой.
+    // Без этого платформа уезжает из-под ног: Arcade сам пассажиров не возит.
+    const ride = this.ridingMover && this.ridingMover.axis === 'x'
+      ? this.ridingMover.body.velocity.x
+      : 0;
+
     if (left && !right) {
-      this.player.setVelocityX(-speed);
+      this.player.setVelocityX(ride - speed);
       this.facing = -1;
     } else if (right && !left) {
-      this.player.setVelocityX(speed);
+      this.player.setVelocityX(ride + speed);
       this.facing = 1;
+    } else if (ride) {
+      this.player.setVelocityX(ride);
     } else {
       // Небольшое торможение вместо мгновенной остановки — так мягче.
       this.player.setVelocityX(this.player.body.velocity.x * 0.6);
@@ -1101,12 +1128,7 @@ export class GameScene extends Phaser.Scene {
     const body = this.player.body;
     if (body.velocity.y < 0 || body.bottom > thing.body.top + 30) return;
 
-    // Высота растёт как квадрат скорости, поэтому «вдвое выше» — это не
-    // двойная скорость, а корень из двух. Иначе пружина забрасывала бы
-    // капибару вчетверо выше, чем задумано.
-    this.player.setVelocityY(this.jumpVelocity * Math.sqrt(heightMul));
-    this.airJumpUsed = false; // после подкидывания двойной прыжок снова доступен
-    sfx.jump();
+    this.launch(heightMul);
 
     if (popped) {
       // Облачко лопается сразу после касания (ТЗ).
@@ -1119,11 +1141,72 @@ export class GameScene extends Phaser.Scene {
         duration: 220,
         onComplete: () => thing.destroy(),
       });
-      return;
     }
+  }
 
-    // Пружина сжимается и распрямляется
-    this.tweens.add({ targets: thing, scaleY: 0.6, duration: 90, yoyo: true });
+  /**
+   * Подбросить капибару на заданную долю от обычной высоты прыжка.
+   *
+   * Высота растёт как квадрат скорости, поэтому «вдвое выше» — это не двойная
+   * скорость, а корень из двух. Иначе пружина забрасывала бы вчетверо выше.
+   */
+  launch(heightMul) {
+    this.player.setVelocityY(this.jumpVelocity * Math.sqrt(heightMul));
+    this.airJumpUsed = false; // после подкидывания двойной прыжок снова доступен
+    sfx.jump();
+  }
+
+  /**
+   * Пружина (ТЗ). Капибара приземляется — пружина сжимается, и есть окно, пока
+   * она разжимается, чтобы нажать прыжок:
+   *
+   *  - ничего не нажали → подскок на 80% от обычного прыжка, стоять на
+   *    пружине и пружинить можно бесконечно;
+   *  - нажали прыжок за время сжатия → пружина выстреливает вдвое выше.
+   *
+   * Окно в SPRING_WINDOW мс: не мгновение, но и не «жми когда хочешь».
+   */
+  touchSpring(spring) {
+    if (!spring.active || this.finished || this.springHold) return;
+    const body = this.player.body;
+    if (body.velocity.y < 0 || body.bottom > spring.body.top + 30) return;
+
+    // Прижимаем капибару к пружине на время сжатия
+    this.player.setVelocityY(0);
+    this.player.y = spring.body.top - body.halfHeight - body.offset.y + 6;
+
+    this.springHold = {
+      spring,
+      until: this.time.now + SPRING_WINDOW,
+      // Нажатый прямо перед касанием прыжок тоже засчитываем — иначе
+      // попадание требовало бы ювелирной точности.
+      charged: this.time.now - this.jumpBufferedAt < 130,
+    };
+
+    sfx.land();
+    this.tweens.add({ targets: spring, scaleY: 0.55, duration: SPRING_WINDOW, ease: 'Sine.easeOut' });
+  }
+
+  /** Пока пружина сжата: ловим нажатие прыжка и отпускаем в конце окна. */
+  updateSpring(time) {
+    const hold = this.springHold;
+    if (!hold) return;
+
+    // Держим капибару на месте, пока пружина сжимается
+    this.player.setVelocityY(0);
+
+    if (time - this.jumpBufferedAt < 130) hold.charged = true;
+    if (time < hold.until) return;
+
+    this.springHold = null;
+    this.jumpBufferedAt = -9999;
+
+    if (hold.spring.active) {
+      this.tweens.add({ targets: hold.spring, scaleY: 1, duration: 160, ease: 'Back.Out' });
+    }
+    // Нажал вовремя — двойная высота, не нажал — мягкий подскок.
+    this.launch(hold.charged ? SPRING_CHARGED : SPRING_IDLE);
+    if (hold.charged) this.puff(this.player.x, this.player.y + 24, 0xd8dee6);
   }
 
   /**
@@ -1159,6 +1242,8 @@ export class GameScene extends Phaser.Scene {
    * платформа уезжает из-под ног, и герой остаётся висеть на месте.
    */
   rideMovers() {
+    this.ridingMover = null;
+
     this.movers.children.iterate((m) => {
       if (!m || !m.active) return;
 
@@ -1171,16 +1256,18 @@ export class GameScene extends Phaser.Scene {
         else if (m.y <= m.min) m.setVelocityY(m.speed);
       }
 
-      // Капибара стоит сверху — переносим её вместе с платформой
+      // Капибара стоит сверху — запоминаем платформу, чтобы двигаться с ней
       const body = this.player.body;
       const стоитСверху =
-        Math.abs(body.bottom - m.body.top) < 8 &&
+        Math.abs(body.bottom - m.body.top) < 10 &&
         body.right > m.body.left + 4 &&
         body.left < m.body.right - 4;
 
       if (стоитСверху) {
-        this.player.x += m.body.deltaX();
-        this.player.y += m.body.deltaY();
+        this.ridingMover = m;
+        // По вертикали переносим положением: гравитация иначе отрывает
+        // капибару от платформы, когда та едет вниз.
+        if (m.axis === 'y') this.player.y += m.body.deltaY();
       }
     });
   }

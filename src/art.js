@@ -472,29 +472,47 @@ export function createTextures(scene) {
   }
   bake(g, 'spike', 60, 38);
 
-  // Костёр: как колючки, трогать нельзя ни с какой стороны (ТЗ)
+  // Костёр: как колючки, трогать нельзя ни с какой стороны (ТЗ).
+  // Пламя — капля со скруглённым низом и острым верхом: так огонь читается
+  // сразу, в отличие от простого треугольника.
+  const flame = (cx, bottom, w, h, color) => {
+    g.fillStyle(color, 1);
+    g.beginPath();
+    g.moveTo(cx, bottom - h); // острый кончик
+    g.lineTo(cx + w * 0.45, bottom - h * 0.45);
+    g.lineTo(cx + w * 0.5, bottom - h * 0.16);
+    g.arc(cx, bottom - h * 0.16, w * 0.5, 0, Math.PI); // круглый низ
+    g.lineTo(cx - w * 0.45, bottom - h * 0.45);
+    g.closePath();
+    g.fillPath();
+  };
+
+  // Угли под пламенем
+  g.fillStyle(0x8a3a12, 1);
+  g.fillEllipse(34, 62, 46, 12);
+
+  flame(34, 64, 40, 52, 0xe8480f); // внешнее пламя
+  flame(34, 62, 27, 38, 0xf5900f); // среднее
+  flame(34, 60, 15, 24, 0xffd451); // сердцевина
+  g.fillStyle(0xfff3b0, 0.9);
+  g.fillEllipse(34, 52, 8, 12);
+
+  // Два полена крест-накрест под огнём
+  const log = (x1, y1, x2, y2) => {
+    g.lineStyle(13, 0x8d6b4b, 1);
+    g.lineBetween(x1, y1, x2, y2);
+    g.lineStyle(4, 0x5a3a22, 1);
+    g.lineBetween(x1, y1, x2, y2);
+    g.lineStyle(0);
+  };
   g.fillStyle(0x8d6b4b, 1);
   g.lineStyle(4, 0x5a3a22, 1);
-  g.fillRoundedRect(6, 40, 48, 12, 6);
-  g.strokeRoundedRect(6, 40, 48, 12, 6);
-  g.fillRoundedRect(14, 30, 32, 11, 5);
-  g.strokeRoundedRect(14, 30, 32, 11, 5);
-  const flame = (cx, cy, w, h, color) => {
-    g.fillStyle(color, 1);
-    g.fillPoints(
-      [
-        { x: cx, y: cy - h },
-        { x: cx + w / 2, y: cy },
-        { x: cx, y: cy + h / 3 },
-        { x: cx - w / 2, y: cy },
-      ],
-      true
-    );
-  };
-  flame(30, 26, 34, 26, 0xe8760f);
-  flame(30, 24, 20, 18, 0xffc247);
-  flame(30, 22, 10, 10, 0xfff3b0);
-  bake(g, 'campfire', 60, 56);
+  g.fillRoundedRect(4, 62, 60, 14, 7);
+  g.strokeRoundedRect(4, 62, 60, 14, 7);
+  g.fillStyle(0x6b4a33, 1);
+  g.fillEllipse(11, 69, 10, 10);
+  g.fillEllipse(57, 69, 10, 10);
+  bake(g, 'campfire', 68, 80);
 
   // Пружина: сжатая спираль на подставке, даёт двойной прыжок вверх
   g.fillStyle(0x9aa7b4, 1);

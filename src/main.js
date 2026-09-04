@@ -62,19 +62,58 @@ initPlatform().then(() => {
    * но кадры не идут, а вместе с ними не обрабатывается и ввод — кнопки не
    * нажимаются. Поэтому будим цикл руками на каждое возвращение фокуса.
    */
-  const wakeUp = () => {
-    if (document.hidden) return;
+  /**
+   * Перезапуск игрового цикла.
+   *
+   * Просто позвать loop.wake() недостаточно: он выходит сразу, если флаг
+   * running ещё поднят. А поднятым он и остаётся, когда браузер перестал
+   * выдавать кадры или очередной кадр упал с ошибкой — цепочка
+   * requestAnimationFrame обрывается, но игра считает, что работает.
+   * Поэтому сначала честно усыпляем (это сбрасывает флаги и останавливает
+   * RAF), и только потом будим.
+   */
+  const restartLoop = () => {
+    game.loop.sleep();
     game.loop.wake();
     game.input.enabled = true;
   };
 
-  window.addEventListener('focus', wakeUp);
-  window.addEventListener('pageshow', wakeUp);
-  document.addEventListener('visibilitychange', wakeUp);
+  // Сторож: раз в секунду смотрит, идут ли кадры. Живёт на таймере, а не на
+  // кадрах, поэтому переживает любую остановку цикла.
+  let lastFrame = -1;
+  let lastAdvanceAt = performance.now();
 
-  // Страховка: любое касание или клавиша будят игру. Ввод Phaser обрабатывает
-  // внутри цикла — если цикл спит, нажатия просто копятся и кнопки кажутся
-  // мёртвыми. Эти слушатели висят на самой странице и до цикла не зависят.
-  document.addEventListener('pointerdown', wakeUp, true);
-  document.addEventListener('keydown', wakeUp, true);
+  setInterval(() => {
+    if (document.hidden) return;
+    const now = performance.now();
+    if (game.loop.frame !== lastFrame) {
+      lastFrame = game.loop.frame;
+      lastAdvanceAt = now;
+      return;
+    }
+    if (now - lastAdvanceAt > 900) {
+      console.warn('[игра] кадры встали — перезапускаем цикл');
+      restartLoop();
+      lastAdvanceAt = now;
+    }
+  }, 1000);
+
+  /** Разбудить, если кадры действительно стоят. Иначе не трогаем. */
+  const wakeUpIfStalled = () => {
+    if (document.hidden) return;
+    if (performance.now() - lastAdvanceAt > 400) restartLoop();
+  };
+
+  window.addEventListener('focus', wakeUpIfStalled);
+  window.addEventListener('pageshow', wakeUpIfStalled);
+  document.addEventListener('visibilitychange', wakeUpIfStalled);
+
+  // Любое касание или клавиша тоже проверяют цикл: ввод Phaser разбирает
+  // внутри кадра, и пока кадров нет, нажатия копятся, а кнопки кажутся
+  // мёртвыми. Эти слушатели висят на странице и от цикла не зависят.
+  document.addEventListener('pointerdown', wakeUpIfStalled, true);
+  document.addEventListener('keydown', wakeUpIfStalled, true);
+
+  // Упавший кадр обрывает цепочку RAF навсегда — поднимаем её обратно.
+  window.addEventListener('error', () => setTimeout(restartLoop, 0));
 });
