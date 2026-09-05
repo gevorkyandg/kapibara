@@ -103,6 +103,11 @@ const FALL_LIMIT = 760;
 const SPRING_IDLE = 0.8;
 const SPRING_CHARGED = 2;
 
+// Насколько выше обычного подбрасывает облачко. Было 1.2, убавлено на треть:
+// облачко срабатывает само, без нажатия, и слишком щедрый подскок превращал
+// цепочку облаков в дорогу, по которой пролетаешь, ничего не делая.
+const CLOUD_LIFT = 0.84;
+
 /** Сама игра: один уровень от старта до флага. */
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -669,7 +674,7 @@ export class GameScene extends Phaser.Scene {
     // Подкидывающие: срабатывают, когда капибара падает на них сверху
     this.physics.add.overlap(this.player, this.springs, (_p, spring) => this.touchSpring(spring));
     this.physics.add.overlap(this.player, this.cloudlets, (_p, cloud) =>
-      this.bounce(cloud, 1.2, true)
+      this.bounce(cloud, CLOUD_LIFT, true)
     );
 
     this.physics.add.collider(this.pebbles, this.solids, (pebble) => pebble.destroy());
