@@ -4,11 +4,9 @@ import {
   GAME_HEIGHT,
   TILE,
   PHYS,
-  TREAT_CHANCE,
   LIVES,
   SLOPE_STEPS,
   HIVE,
-  RANDOM_POOL,
   DEBUG,
 } from '../config.js';
 import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
@@ -289,7 +287,9 @@ export class GameScene extends Phaser.Scene {
             break;
 
           case '*':
-            if (this.rnd.frac() < TREAT_CHANCE) this.addTreat(cx, cy);
+            // Сладость на метке появляется всегда: их число задано в описании
+            // этапа, и бросать за него кости значит расходиться с описанием.
+            this.addTreat(cx, cy);
             break;
 
           case '^': {
@@ -302,14 +302,6 @@ export class GameScene extends Phaser.Scene {
           case 'z':
             this.placeMonster(ch, cx, cy, top);
             break;
-
-          case '?': {
-            // Случайный монстр. Нужен генератору: в описании этапа стоит
-            // «здесь кто-нибудь», а кто именно — решается при сборке.
-            const пул = this.levelData.randomPool || RANDOM_POOL;
-            this.placeMonster(this.rnd.pick(пул), cx, cy, top);
-            break;
-          }
 
           case '~': {
             // Костёр: трогать нельзя ни с какой стороны, как колючки (ТЗ).

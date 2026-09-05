@@ -9,7 +9,6 @@
  */
 
 import { LEVELS, buildLevelMap } from './levels.js';
-import { TREAT_CHANCE } from './config.js';
 
 /** Потолок уровня игрока (ТЗ). */
 export const MAX_LEVEL = 15;
@@ -35,11 +34,17 @@ export const LEVEL_BONUS = {
   speedPerLevel: 6, // px/с к скорости за каждый уровень
   jumpPerTwoLevels: 10, // px/с к силе прыжка каждые два уровня
   levelsPerExtraLife: 5, // каждые 5 уровней +1 максимальная жизнь
-  baseLives: 1, // на старте одна жизнь (ТЗ)
+  // Две жизни с самого начала. С одной любое касание монстра сразу
+  // проваливало этап, и сердечко-подбор лежало мёртвым грузом: возвращать
+  // было нечего.
+  baseLives: 2,
 };
 
 /** Средняя цена сладости в опыте — для прикидки, сколько их даст кампания. */
 const AVG_TREAT_XP = (XP.treat.cupcake + XP.treat.icecream + XP.treat.cake) / 3;
+
+/** Символы монстров на карте — по ним считается опыт за этап. */
+const МОНСТРЫ = new Set(['m', 'f', 'l', 'e', 'b', 'd', 'w', 'j', 'z', 'H']);
 
 /** Сколько опыта можно выжать из одного этапа при идеальном прохождении. */
 export function stageMaxXp(index) {
@@ -48,14 +53,14 @@ export function stageMaxXp(index) {
   let treatSpots = 0;
   for (const row of map) {
     for (const ch of row) {
-      if (ch === 'm' || ch === 'b') monsters++;
+      if (МОНСТРЫ.has(ch)) monsters++;
       else if (ch === '*') treatSpots++;
     }
   }
   return (
     XP.stage[3] +
     monsters * XP.monster.easy +
-    Math.round(treatSpots * TREAT_CHANCE * AVG_TREAT_XP)
+    Math.round(treatSpots * AVG_TREAT_XP)
   );
 }
 
