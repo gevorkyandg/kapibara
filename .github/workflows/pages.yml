@@ -62,7 +62,9 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.страница.outputs.page_url }}
+      url: ${{ steps.page.outputs.page_url }}
     steps:
-      - id: страница
+      # Имя шага только латиницей: кириллические идентификаторы GitHub не
+      # принимает и отказывается разбирать весь файл целиком.
+      - id: page
         uses: actions/deploy-pages@v4
