@@ -21,12 +21,25 @@ import { PATROL_RANGE } from './config.js';
  * край — развернись» запирает монстра на месте, если его вытолкнуло за
  * границу: он дёргается туда-сюда каждый кадр и никуда не идёт.
  */
-function заКраемУчастка(m) {
+function заКраемУчастка(m, вперёд = 0) {
   const половина = (m.patrolRange ?? PATROL_RANGE) / 2;
-  const сдвиг = m.x - (m.homeX ?? m.x);
+  const сдвиг = m.x - (m.homeX ?? m.x) + m.dir * вперёд;
   if (сдвиг > половина && m.dir > 0) return true;
   if (сдвиг < -половина && m.dir < 0) return true;
   return false;
+}
+
+/**
+ * Далеко ли улетит прыгун за один прыжок.
+ *
+ * Нужно для разворота с упреждением: прыгун решает, куда двигаться, только в
+ * момент отталкивания, а потом летит по дуге и приземлиться посередине уже не
+ * может. Без упреждения он вылетал за край участка ровно на длину прыжка, и
+ * участок в 250 пикселей превращался в 370.
+ */
+function прыжокДлина(scene, m) {
+  const тяжесть = scene.physics.world.gravity.y || 1750;
+  return Math.abs(m.speed) * ((2 * Math.abs(m.hopPower)) / тяжесть);
 }
 
 /** Идёт по земле, разворачивается у стены, у края площадки и своего участка. */
@@ -44,7 +57,9 @@ function patrol(scene, m) {
     for (let d = 10; d <= 44 && !опора; d += 8) {
       if (scene.isSolidAtPixel(ahead, m.body.bottom + d)) опора = true;
     }
-    if (!опора) m.dir *= -1;
+    // Пружина для монстра — та же стена: встав на неё, он караулит игрока
+    // ровно там, где увернуться уже нельзя.
+    if (!опора || scene.пружинаВ(ahead)) m.dir *= -1;
   }
 
   m.setVelocityX(m.speed * m.dir);
@@ -60,10 +75,10 @@ function hop(scene, m, time) {
 
   if (m.body.blocked.left) m.dir = 1;
   else if (m.body.blocked.right) m.dir = -1;
-  else if (заКраемУчастка(m)) m.dir *= -1;
+  else if (заКраемУчастка(m, прыжокДлина(scene, m))) m.dir *= -1;
 
   const ahead = m.x + m.dir * 40;
-  if (!scene.isSolidAtPixel(ahead, m.body.bottom + 10)) m.dir *= -1;
+  if (!scene.isSolidAtPixel(ahead, m.body.bottom + 10) || scene.пружинаВ(ahead)) m.dir *= -1;
 
   m.setVelocity(m.speed * m.dir, m.hopPower);
   m.setFlipX(m.dir < 0);
@@ -102,6 +117,10 @@ export const MONSTERS = {
     body: { w: 46, h: 34, ox: 7, oy: 20 },
     // Скорость и прыжок подняты на 20% — лягушка стала заметно живее.
     speed: 108,
+    // Участок вчетверо короче обычного: лягушка медленная, и на маршруте во
+    // весь экран она половину времени скачет где-то вдали, а игрок видит
+    // пустую дорогу вместо монстра.
+    patrolRange: 300,
     hopPower: -504,
     hopEvery: 1400,
     update: hop,
