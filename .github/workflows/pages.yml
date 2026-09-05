@@ -46,12 +46,13 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - uses: actions/configure-pages@v5
-        # Включить страницу, если она ещё не включена, — чтобы не ходить в
-        # настройки руками.
-        with:
-          enablement: true
-
+      # Шага configure-pages здесь нет нарочно. Он умеет включать страницу
+      # сам, но прав на это у сборки нет, и она падала на нём целиком. А для
+      # путей он не нужен: в vite.config.js стоит base './', то есть игра
+      # ссылается на свои файлы относительно себя и работает из любой папки.
+      #
+      # Взамен страницу надо один раз включить руками:
+      # Settings → Pages → Source: GitHub Actions.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
