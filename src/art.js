@@ -940,21 +940,36 @@ export function createTextures(scene) {
     g.fillEllipse(44, 48, 14, 9);
     bake(g, `dirt-${i}`, 60, 60);
 
-    // Склоны. Внутри клетки — десять ступенек по 6 пикселей: с ними подъём
-    // выглядит ровным скатом, а не лесенкой в человеческий рост. Столько же
-    // ступенек стоит и в столкновениях, поэтому картинка не врёт.
+    // Склоны. Рисуем сплошным скатом, а не набором ступенек: ступеньки в
+    // картинке давали полосатый треугольник, потому что травяная кайма
+    // рисовалась на каждой из пятидесяти и они накладывались друг на друга.
+    // В столкновениях ступеньки остаются — там они нужны, чтобы капибара
+    // шла по скату ровно, — но видеть их игрок не должен.
     for (const вверх of [true, false]) {
-      const ш = 60 / SLOPE_STEPS;
-      for (let k = 0; k < SLOPE_STEPS; k++) {
-        const x = k * ш;
-        const верх = вверх ? 60 - (k + 1) * ш : k * ш;
-        g.fillStyle(theme.dirt, 1);
-        g.fillRect(x, верх, ш, 60 - верх);
-        g.fillStyle(theme.grass, 1);
-        g.fillRect(x, верх, ш, Math.min(14, 60 - верх));
-        g.fillStyle(theme.grassDark, 1);
-        g.fillRect(x, верх + 12, ш, Math.min(4, Math.max(0, 60 - верх - 12)));
-      }
+      const левY = вверх ? 60 : 0;
+      const правY = вверх ? 0 : 60;
+      const скат = (сдвиг, толщина) => [
+        { x: 0, y: левY + сдвиг },
+        { x: 60, y: правY + сдвиг },
+        { x: 60, y: правY + сдвиг + толщина },
+        { x: 0, y: левY + сдвиг + толщина },
+      ];
+
+      g.fillStyle(theme.dirt, 1);
+      g.fillPoints(
+        [
+          { x: 0, y: левY },
+          { x: 60, y: правY },
+          { x: 60, y: 60 },
+          { x: 0, y: 60 },
+        ],
+        true
+      );
+      g.fillStyle(theme.grass, 1);
+      g.fillPoints(скат(0, 14), true);
+      g.fillStyle(theme.grassDark, 1);
+      g.fillPoints(скат(12, 4), true);
+
       g.fillStyle(theme.dirtDark, 1);
       g.fillEllipse(вверх ? 44 : 16, 48, 12, 8);
       bake(g, `slope-${вверх ? 'up' : 'down'}-${i}`, 60, 60);

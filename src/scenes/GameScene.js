@@ -391,13 +391,18 @@ export class GameScene extends Phaser.Scene {
             mover.axis = ch === '-' ? 'x' : 'y';
             mover.speed = ch === '-' ? 80 : 60;
             const range = ch === '-' ? 170 : 130;
+
+            // Качается вокруг своего места, а не уезжает от него. Иначе в
+            // цепочке через пропасть промежутки перестают быть одинаковыми:
+            // площадка уходит на весь размах в одну сторону, и с одного бока
+            // разрыв вдвое шире заданного, а с другого её почти не видно.
             if (mover.axis === 'x') {
-              mover.min = cx;
-              mover.max = cx + range;
+              mover.min = cx - range / 2;
+              mover.max = cx + range / 2;
               mover.setVelocityX(mover.speed);
             } else {
-              mover.min = top + 13;
-              mover.max = top + 13 + range;
+              mover.min = top + 13 - range / 2;
+              mover.max = top + 13 + range / 2;
               mover.setVelocityY(mover.speed);
             }
             break;

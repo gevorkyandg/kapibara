@@ -52,7 +52,10 @@ function patrol(scene, m) {
     // Край площадки или скат? Смотрим не в одну точку, а вглубь: на склоне
     // земля впереди ниже на те же 30 пикселей, и по одной точке монстр решал,
     // что перед ним обрыв, и разворачивался у каждой ступеньки.
-    const ahead = m.x + m.dir * 30;
+    // Смотрим на клетку с лишним вперёд, а не себе под нос. Монстр, стоящий
+    // вплотную к обрыву, запирает переправу: игроку нужен разбег и место для
+    // приземления, а их занимает он.
+    const ahead = m.x + m.dir * 70;
     let опора = false;
     for (let d = 10; d <= 44 && !опора; d += 8) {
       if (scene.isSolidAtPixel(ahead, m.body.bottom + d)) опора = true;
@@ -77,7 +80,9 @@ function hop(scene, m, time) {
   else if (m.body.blocked.right) m.dir = -1;
   else if (заКраемУчастка(m, прыжокДлина(scene, m))) m.dir *= -1;
 
-  const ahead = m.x + m.dir * 40;
+  // Прыгуну до края нужно ещё больше места: он улетает по дуге и с края
+  // сходит целиком.
+  const ahead = m.x + m.dir * 90;
   if (!scene.isSolidAtPixel(ahead, m.body.bottom + 10) || scene.пружинаВ(ahead)) m.dir *= -1;
 
   m.setVelocity(m.speed * m.dir, m.hopPower);
@@ -353,14 +358,21 @@ export const MONSTERS = {
     hopPower: -494,
     hopEvery: 1500,
     sight: 320,
-    tongueEvery: 2400,
-    tongueReach: 187, // на 15% короче прежнего
+    // Язык укорочен и замедлен ещё на пятую часть: в связке с прыжком он не
+    // оставлял игроку ни одного кадра на решение.
+    tongueEvery: 2880,
+    tongueReach: 150,
+    // Участок патруля короткий, как у лягушки: жаба тоже прыгает, и на
+    // маршруте во весь экран она успевает уйти к самому обрыву.
+    patrolRange: 300,
     update(scene, m, time) {
       const player = scene.player;
       const dist = Math.abs(player.x - m.x);
       const level = Math.abs(player.y - m.y) < 70;
 
-      if (dist < m.sight && level && time >= (m.tongueReadyAt || 0)) {
+      // Языком бьёт только стоя на земле. В прыжке жаба и так неуязвима
+      // сверху, и добавлять к этому удар — значит не оставлять выбора вовсе.
+      if (m.body.blocked.down && dist < m.sight && level && time >= (m.tongueReadyAt || 0)) {
         m.tongueReadyAt = time + m.tongueEvery;
         m.setVelocityX(0);
         scene.shootTongue(m, player.x < m.x ? -1 : 1);
@@ -380,9 +392,11 @@ export const MONSTERS = {
     ground: false,
     body: { w: 30, h: 104, ox: 12, oy: 14 },
     sight: 300, // издалека замечает
-    strikeRange: 190, // на этой дистанции бросается
-    strikeSpeed: 560, // скорость выпада — за 190 мс это больше 100 пикселей
-    strikeEvery: 900, // и повторяет броски, пока игрок близко
+    strikeRange: 171, // на этой дистанции бросается
+    // Выпад короче на десятую часть, а повторяет змея вдвое реже: очередь из
+    // бросков раз в 900 мс не оставляла промежутка, в который можно пройти.
+    strikeSpeed: 504,
+    strikeEvery: 1800,
     outMs: 4200,
     hideMs: 1200,
     update(scene, m, time) {
