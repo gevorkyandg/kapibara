@@ -1226,6 +1226,27 @@ export class GameScene extends Phaser.Scene {
     return `${имя} · этап ${stage + 1} из ${всего} · «${this.levelData.name}»`;
   }
 
+  /**
+   * Начинается ли впереди склон.
+   *
+   * Монстрам на склоны нельзя. В столкновениях скат — это лесенка из мелких
+   * ступенек, и заход на ступеньку, который писался для капибары, работает и
+   * для них: ходячий спокойно заползает на горку, где ему не место, и стоит
+   * там наверху. Чинить ходьбу по скату для каждого вида дороже, чем просто
+   * не пускать их туда: маршрут патруля обрывается у подножия.
+   */
+  склонВпереди(x, низ) {
+    const col = Math.floor(x / TILE);
+    if (col < 0 || col >= this.cols) return false;
+    for (let d = 0; d <= 44; d += 8) {
+      const row = Math.floor((низ + d) / TILE);
+      if (row < 0 || row >= this.rows) continue;
+      const ch = this.map[row][col];
+      if (ch === '/' || ch === '\\') return true;
+    }
+    return false;
+  }
+
   handleMovement(time, onFloor) {
     const k = this.keys;
     const тело = this.player.body;
