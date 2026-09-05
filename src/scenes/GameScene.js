@@ -9,7 +9,7 @@ import {
   HIVE,
   DEBUG,
 } from '../config.js';
-import { LEVELS, buildLevelMap, countCoins } from '../levels.js';
+import { LEVELS, ROUTES, routeOf, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCoordRuler } from '../coords.js';
 import { createCapybara } from '../capybara.js';
@@ -1139,8 +1139,21 @@ export class GameScene extends Phaser.Scene {
     return есть;
   }
 
+  /**
+   * Где мы сейчас: «Долина · этап 3 из 5». Нужно и в паузе, и в отладочной
+   * линейке — по скриншоту иначе не понять, о каком этапе речь.
+   */
+  где() {
+    const { route, stage } = routeOf(this.levelIndex);
+    const маршрут = ROUTES[route];
+    const всего = маршрут ? маршрут.levels.length : LEVELS.length;
+    const имя = маршрут ? маршрут.name : '';
+    return `${имя} · этап ${stage + 1} из ${всего} · «${this.levelData.name}»`;
+  }
+
   handleMovement(time, onFloor) {
     const k = this.keys;
+    const тело = this.player.body;
     const left = this.cursors.left.isDown || k.A.isDown || this.touch.left;
     const right = this.cursors.right.isDown || k.D.isDown || this.touch.right;
 
@@ -1185,11 +1198,30 @@ export class GameScene extends Phaser.Scene {
       ? this.ridingMover.body.velocity.x
       : 0;
 
+    // Пока идём вверх — в стену не толкаемся.
+    //
+    // Толкаться там бесполезно и вредно: за кадр тело въезжает в стену на
+    // несколько пикселей, и Arcade видит перекрытие сразу по двум осям —
+    // вбок и вверх. Разводит он по вертикали, и прыжок гаснет в первом же
+    // кадре. Со стороны это выглядит так, будто у стены кнопка прыжка не
+    // работает: капибара дёргается на четыре пикселя и садится обратно.
+    //
+    // На земле поведение прежнее: там упор в стену безобиден, а «blocked»
+    // нужен заходу на ступеньку склона.
+    const шаг = right ? 1 : left ? -1 : 0;
+    const взлетаем =
+      тело.velocity.y < 0 || (time - this.jumpBufferedAt < 130 && (onFloor || time - this.lastFloorTime < 110));
+    const впереди = this.player.x + шаг * (тело.halfWidth + 3);
+    const вСтену =
+      шаг !== 0 &&
+      взлетаем &&
+      (this.isSolidAtPixel(впереди, тело.center.y) || this.isSolidAtPixel(впереди, тело.top + 6));
+
     if (left && !right) {
-      this.player.setVelocityX(ride - speed);
+      this.player.setVelocityX(вСтену ? ride : ride - speed);
       this.facing = -1;
     } else if (right && !left) {
-      this.player.setVelocityX(ride + speed);
+      this.player.setVelocityX(вСтену ? ride : ride + speed);
       this.facing = 1;
     } else if (ride) {
       this.player.setVelocityX(ride);
@@ -2312,6 +2344,18 @@ export class GameScene extends Phaser.Scene {
           fontSize: '44px',
           color: COLORS.ink,
           fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+    );
+
+    c.add(
+      this.add
+        .text(cx, cy - 212, this.где(), {
+          fontFamily: FONT,
+          fontSize: '20px',
+          color: COLORS.inkSoft ?? COLORS.ink,
+          align: 'center',
+          wordWrap: { width: 500 },
         })
         .setOrigin(0.5)
     );

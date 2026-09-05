@@ -75,7 +75,8 @@ export function createCoordRuler(scene) {
     const p = scene.player;
     if (p) {
       где.setText(
-        `капибара  x ${Math.round(p.x)}  y ${Math.round(p.y)}   ` +
+        `${scene.где ? scene.где() + '   ' : ''}` +
+          `капибара  x ${Math.round(p.x)}  y ${Math.round(p.y)}   ` +
           `клетка ${Math.floor(p.x / TILE)}:${Math.floor(p.y / TILE)}`
       );
     }
