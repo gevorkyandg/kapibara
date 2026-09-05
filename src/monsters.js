@@ -12,11 +12,28 @@
 
 import Phaser from 'phaser';
 import { XP } from './progression.js';
+import { PATROL_RANGE } from './config.js';
 
-/** Идёт по земле, разворачивается у стены и у края площадки. */
+/**
+ * Не пора ли повернуть назад: дошёл до края своего участка.
+ *
+ * Разворачиваем только того, кто идёт наружу. Симметричная проверка «вышел за
+ * край — развернись» запирает монстра на месте, если его вытолкнуло за
+ * границу: он дёргается туда-сюда каждый кадр и никуда не идёт.
+ */
+function заКраемУчастка(m) {
+  const половина = (m.patrolRange ?? PATROL_RANGE) / 2;
+  const сдвиг = m.x - (m.homeX ?? m.x);
+  if (сдвиг > половина && m.dir > 0) return true;
+  if (сдвиг < -половина && m.dir < 0) return true;
+  return false;
+}
+
+/** Идёт по земле, разворачивается у стены, у края площадки и своего участка. */
 function patrol(scene, m) {
   if (m.body.blocked.left) m.dir = 1;
   else if (m.body.blocked.right) m.dir = -1;
+  else if (заКраемУчастка(m)) m.dir *= -1;
 
   if (m.body.blocked.down) {
     // Край площадки или скат? Смотрим не в одну точку, а вглубь: на склоне
@@ -43,6 +60,8 @@ function hop(scene, m, time) {
 
   if (m.body.blocked.left) m.dir = 1;
   else if (m.body.blocked.right) m.dir = -1;
+  else if (заКраемУчастка(m)) m.dir *= -1;
+
   const ahead = m.x + m.dir * 40;
   if (!scene.isSolidAtPixel(ahead, m.body.bottom + 10)) m.dir *= -1;
 

@@ -118,6 +118,15 @@ export class GameScene extends Phaser.Scene {
     this.themeIndex = level.theme;
 
     this.finishX = null; // сцена переиспользуется, старая черта не должна остаться
+    // Своя случайность этапа, засеянная его номером.
+    //
+    // Всё, что решается «броском монетки» при сборке карты — какой монстр
+    // встанет на метку «?», выпадет ли сладость, в какую сторону пойдёт
+    // черепашка, — должно решаться одинаково при каждом запуске. Иначе один
+    // и тот же этап у одного игрока проходится, а у другого нет, и бот
+    // не может прогнать его дважды с одинаковым результатом.
+    this.rnd = new Phaser.Math.RandomDataGenerator([`stage-${this.levelIndex}`]);
+
     this.map = buildLevelMap(this.levelIndex);
     this.cols = this.map[0].length;
     this.rows = this.map.length;
@@ -280,7 +289,7 @@ export class GameScene extends Phaser.Scene {
             break;
 
           case '*':
-            if (Math.random() < TREAT_CHANCE) this.addTreat(cx, cy);
+            if (this.rnd.frac() < TREAT_CHANCE) this.addTreat(cx, cy);
             break;
 
           case '^': {
@@ -298,7 +307,7 @@ export class GameScene extends Phaser.Scene {
             // Случайный монстр. Нужен генератору: в описании этапа стоит
             // «здесь кто-нибудь», а кто именно — решается при сборке.
             const пул = this.levelData.randomPool || RANDOM_POOL;
-            this.placeMonster(Phaser.Math.RND.pick(пул), cx, cy, top);
+            this.placeMonster(this.rnd.pick(пул), cx, cy, top);
             break;
           }
 
@@ -499,8 +508,9 @@ export class GameScene extends Phaser.Scene {
       if (typeof значение === 'number') m[ключ] = значение;
     }
 
-    m.dir = Math.random() < 0.5 ? -1 : 1;
+    m.dir = this.rnd.frac() < 0.5 ? -1 : 1;
     m.nextHopAt = 0;
+    m.homeX = x; // середина участка патруля
     m.homeY = y;
     m.state = 'hover';
 
@@ -586,13 +596,13 @@ export class GameScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
-      delay: Math.random() * 700,
+      delay: this.rnd.frac() * 700,
     });
   }
 
   addTreat(x, y) {
     // Чем дороже сладость по опыту, тем реже она попадается (ТЗ).
-    const pick = Phaser.Math.RND.pick([
+    const pick = this.rnd.pick([
       TREATS[0], TREATS[0], TREATS[0],
       TREATS[1], TREATS[1],
       TREATS[2],
