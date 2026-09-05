@@ -102,6 +102,17 @@ const BOULDER_DROP = 220;
 const FALL_LIMIT = 760;
 
 /**
+ * Сколько пикселей от старта монстры не занимают и не забредают.
+ *
+ * Спаун генератор держит ещё дальше — за 400 пикселями, — а это граница
+ * патруля: досюда ходячий доходит и разворачивается.
+ */
+const СВОБОДНО_У_СТАРТА = 260;
+
+/** Через сколько возвращаются облачко и падающая площадка. */
+const ОПОРА_ВЕРНЁТСЯ = 4000;
+
+/**
  * Невидимые стены на краях этапа: за спиной у старта и сразу за флажком.
  *
  * Высота взята с большим запасом нарочно. Стена в девять клеток кончалась на
@@ -1177,6 +1188,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Отойти от края пропасти вглубь твёрдой земли.
+   *
+   * Ищем место, под которым земля есть и впереди, и на пару шагов вперёд:
+   * тогда у игрока будет разбег, а не полшага до обрыва.
+   */
+  подальшеОтКрая(точка) {
+    let x = точка.x;
+    const пол = точка.y + 45;
+    for (let шаг = 0; шаг < 12; шаг++) {
+      const твёрдо =
+        this.isSolidAtPixel(x, пол) &&
+        this.isSolidAtPixel(x + 60, пол) &&
+        this.isSolidAtPixel(x + 120, пол);
+      if (твёрдо) break;
+      x -= 40;
+    }
+    return { x: Math.max(this.startPos.x, x), y: точка.y };
+  }
+
+  /**
    * Есть ли под этим местом опора, которая никуда не денется.
    *
    * Земля, площадка и склон остаются на месте всегда. Падающая площадка
@@ -1224,6 +1255,18 @@ export class GameScene extends Phaser.Scene {
     const всего = маршрут ? маршрут.levels.length : LEVELS.length;
     const имя = маршрут ? маршрут.name : '';
     return `${имя} · этап ${stage + 1} из ${всего} · «${this.levelData.name}»`;
+  }
+
+  /**
+   * Не заступил ли монстр на пятачок у старта.
+   *
+   * Игрок мог запустить этап и отойти от компьютера. Вернуться к пустому
+   * экрану «жизни кончились» — худшее, что может случиться в первые секунды,
+   * поэтому у старта монстров нет и быть не может: ни поставленных туда, ни
+   * забредших.
+   */
+  уСтарта(x) {
+    return x < (this.startPos?.x ?? 0) + СВОБОДНО_У_СТАРТА;
   }
 
   /**
@@ -1662,20 +1705,23 @@ export class GameScene extends Phaser.Scene {
     if (!enemy.active || this.finished) return;
     const time = this.time.now;
 
-    // Прыжок сверху — монстрик исчезает с хлопком, капибара отскакивает.
-    // Колючих (ёжик, дикобраз) и змею топтать нельзя — только рогаткой.
-    const fallingOnto =
+    // Монстр умирает от любого касания, а не только от прыжка сверху.
+    //
+    // Так задумано: угрозой остаётся то, что нельзя обезвредить телом —
+    // пропасти, костры, колючки, валуны, падающие шипы, иглы дикобраза и язык
+    // жабы. Монстры же превращаются из стены в помеху, и сложные участки
+    // перестают быть непроходимыми из-за одного неудачно вставшего ёжика.
+    //
+    // Отскок остаётся только тем, на кого приземлились сверху: он и задуман
+    // как награда за точный прыжок, а не как бесплатный подъём при любом
+    // касании.
+    const сверху =
       enemy.stompable !== false &&
       this.player.body.velocity.y > 60 &&
       this.player.body.bottom < enemy.body.top + 26;
 
-    if (fallingOnto) {
-      this.player.setVelocityY(PHYS.bounceOnEnemy);
-      this.neutralize(enemy);
-      return;
-    }
-
-    this.hurt(time, false, enemy.kind);
+    if (сверху) this.player.setVelocityY(PHYS.bounceOnEnemy);
+    this.neutralize(enemy);
   }
 
   /**
@@ -1693,16 +1739,15 @@ export class GameScene extends Phaser.Scene {
     this.launch(heightMul);
 
     if (popped) {
-      // Облачко лопается сразу после касания (ТЗ).
+      // Облачко лопается, но потом надувается снова.
+      //
+      // Насовсем убирать нельзя: если игрок не перебрался через сплошную
+      // пропасть, но извёл по дороге все облачка, пройти её станет уже нечем —
+      // этап запирается наглухо, и остаётся только начинать заново.
       thing.disableBody(true, false);
       this.puff(thing.x, thing.y, 0xffffff);
-      this.tweens.add({
-        targets: thing,
-        scale: 1.3,
-        alpha: 0,
-        duration: 220,
-        onComplete: () => thing.destroy(),
-      });
+      this.tweens.add({ targets: thing, scale: 1.3, alpha: 0, duration: 220 });
+      this.вернутьОпору(thing, thing.x, thing.y);
     }
   }
 
@@ -1807,6 +1852,8 @@ export class GameScene extends Phaser.Scene {
     if (weak.falling || !weak.active) return;
     if (this.player.body.bottom > weak.body.top + 20) return; // задели снизу
     weak.falling = true;
+    weak.домаX = weak.домаX ?? weak.x;
+    weak.домаY = weak.домаY ?? weak.y;
 
     this.tweens.add({
       targets: weak,
@@ -1821,9 +1868,31 @@ export class GameScene extends Phaser.Scene {
           y: weak.y + 400,
           alpha: 0,
           duration: 700,
-          onComplete: () => weak.destroy(),
+          onComplete: () => this.вернутьОпору(weak, weak.домаX, weak.домаY),
         });
       },
+    });
+  }
+
+  /**
+   * Вернуть на место опору, которой игрок воспользовался: облачко или
+   * падающую площадку.
+   *
+   * Без этого сплошную пропасть можно запереть: извёл опоры, не перебравшись,
+   * — и дальше ходу нет вовсе. С возвратом попытка всегда остаётся.
+   */
+  вернутьОпору(объект, x, y) {
+    if (!объект.scene) return;
+    this.time.delayedCall(ОПОРА_ВЕРНЁТСЯ, () => {
+      if (!объект.scene || this.finished) return;
+      объект.falling = false;
+      объект.setPosition(x, y);
+      объект.setAlpha(0);
+      объект.setScale(1);
+      объект.enableBody(true, x, y, true, true);
+      объект.body.updateFromGameObject?.();
+      this.tweens.add({ targets: объект, alpha: 1, duration: 260 });
+      this.puff(x, y, 0xffffff);
     });
   }
 
@@ -2335,7 +2404,12 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(180, 0.008);
     this.cameras.main.flash(200, 255, 180, 180);
 
-    const место = this.freeSpotAbove(this.checkpoint.x, this.checkpoint.y);
+    // Упал в пропасть — возвращаем не к самому краю. Точка возврата
+    // ставится там, где игрок последний раз спокойно стоял, а спокойно стоял
+    // он ровно перед прыжком, на кромке. Вернуть туда — значит подарить ему
+    // тот же обрыв в упор и, если он снова не долетит, петлю смертей.
+    const откуда = fromPit ? this.подальшеОтКрая(this.checkpoint) : this.checkpoint;
+    const место = this.freeSpotAbove(откуда.x, откуда.y);
     this.player.setVelocity(0, 0);
     this.player.setPosition(место.x, место.y);
     this.capy.setPosition(место.x, место.y);

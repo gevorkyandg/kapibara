@@ -63,7 +63,12 @@ function patrol(scene, m) {
     // Пружина для монстра — та же стена: встав на неё, он караулит игрока
     // ровно там, где увернуться уже нельзя. Склон — тоже граница: наверх
     // горки монстрам ходу нет.
-    if (!опора || scene.пружинаВ(ahead) || scene.склонВпереди(ahead, m.body.bottom)) {
+    if (
+      !опора ||
+      scene.пружинаВ(ahead) ||
+      scene.склонВпереди(ahead, m.body.bottom) ||
+      scene.уСтарта(ahead)
+    ) {
       m.dir *= -1;
     }
   }
@@ -89,7 +94,8 @@ function hop(scene, m, time) {
   if (
     !scene.isSolidAtPixel(ahead, m.body.bottom + 10) ||
     scene.пружинаВ(ahead) ||
-    scene.склонВпереди(ahead, m.body.bottom)
+    scene.склонВпереди(ahead, m.body.bottom) ||
+    scene.уСтарта(ahead)
   ) {
     m.dir *= -1;
   }
