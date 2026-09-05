@@ -443,15 +443,34 @@ export function createTextures(scene) {
     }
   };
 
-  // Морда: вытянутый конус вправо, носик тёмной каплей.
+  // Морда клином, как на референсе: ото лба к носу сходит на острие, и
+  // чешуя идёт по ней до самого кончика, мельчая с каждой пластинкой.
+  // Голая круглая морда выдавала в нём мышь, а панголин — зверь, у которого
+  // чешуя начинается прямо от носа.
   const морда = () => {
+    const клин = [
+      { x: 62, y: 26 },
+      { x: 82, y: 31 },
+      { x: 94, y: 38 },
+      { x: 82, y: 45 },
+      { x: 62, y: 47 },
+    ];
     g.fillStyle(0xbfa29a, 1);
     g.lineStyle(3, 0x5d423c, 1);
-    g.fillEllipse(80, 36, 30, 13);
-    g.strokeEllipse(80, 36, 30, 13);
+    g.fillPoints(клин, true);
+    g.strokePoints(клин, true);
+
+    // Носик — тёмная капля на самом острие.
     g.fillStyle(0x452f2b, 1);
-    g.fillCircle(93, 37, 4);
-    eyes(74, 74, 31, 3); // глаз один: смотрит вбок
+    g.fillCircle(91, 38, 3.5);
+
+    // Чешуя по переносице.
+    for (let i = 0; i < 5; i++) {
+      const t = i / 4;
+      чешуйка(60 + t * 26, 25 + t * 9, 12 - t * 7, 9 - t * 5, i % 2 === 0);
+    }
+
+    eyes(68, 68, 38, 3); // глаз один: смотрит вбок
   };
 
   хвост(0);
@@ -499,12 +518,21 @@ export function createTextures(scene) {
     g.strokeRoundedRect(x, 20, 9, 12, 4);
   });
   for (let i = 0; i < 4; i++) чешуйка(30 + i * 10, 32, 12, 9, i % 2 === 0);
+  const клинЛёжа = [
+    { x: 60, y: 30 },
+    { x: 80, y: 35 },
+    { x: 92, y: 41 },
+    { x: 80, y: 47 },
+    { x: 60, y: 48 },
+  ];
   g.fillStyle(0xbfa29a, 1);
   g.lineStyle(3, 0x5d423c, 1);
-  g.fillEllipse(78, 40, 28, 14);
-  g.strokeEllipse(78, 40, 28, 14);
+  g.fillPoints(клинЛёжа, true);
+  g.strokePoints(клинЛёжа, true);
+  g.fillStyle(0x452f2b, 1);
+  g.fillCircle(89, 41, 3.5);
   g.lineStyle(3, 0x452f2b, 1);
-  [[68, 36], [76, 36]].forEach(([x, y]) => {
+  [[66, 38], [76, 39]].forEach(([x, y]) => {
     g.lineBetween(x - 4, y - 4, x + 4, y + 4);
     g.lineBetween(x + 4, y - 4, x - 4, y + 4);
   });
