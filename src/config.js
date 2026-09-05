@@ -144,8 +144,8 @@ export const DEBUG = {
  * прав у него только на добавление записей. Читать чужие данные им нельзя.
  */
 export const СТАТИСТИКА = {
-  адрес: '', // https://xxxx.supabase.co
-  ключ: '', // публичный ключ проекта (anon public)
+  адрес: 'https://ydigfourhwgufqdgwfno.supabase.co',
+  ключ: 'sb_publishable_vlCALmoA8-tmSR_8MvE7Tg_BwSqCA-h',
   таблица: 'runs',
 };
 
