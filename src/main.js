@@ -9,6 +9,7 @@ import { GameScene } from './scenes/GameScene.js';
 import { ResultScene } from './scenes/ResultScene.js';
 import { suspendAudio, resumeAudio } from './audio.js';
 import { startWatchdog } from './watchdog.js';
+import { разобратьОчередь } from './telemetry.js';
 
 const config = {
   type: Phaser.AUTO, // WebGL, а если его нет — canvas
@@ -58,4 +59,8 @@ initPlatform().then(() => {
   // Сторож следит, идут ли кадры, поднимает игру из зависания и пишет о
   // случившемся прямо на экране — иначе причину не поймать.
   startWatchdog(game, DEBUG.diagnostics);
+
+  // Записи, которые в прошлый раз не ушли — связь оборвалась или их срезал
+  // блокировщик, — отправляем при запуске.
+  разобратьОчередь();
 });

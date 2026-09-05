@@ -12,6 +12,7 @@ import {
 import { LEVELS, ROUTES, routeOf, buildLevelMap, countCoins } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCoordRuler } from '../coords.js';
+import { начатьЗабег, отметитьСмерть, закончитьЗабег } from '../telemetry.js';
 import { createCapybara } from '../capybara.js';
 import { MONSTERS } from '../monsters.js';
 import {
@@ -207,6 +208,28 @@ export class GameScene extends Phaser.Scene {
 
     // Линейка координат — инструмент для разговора о карте (DEBUG.coords).
     this.ruler = DEBUG.coords ? createCoordRuler(this) : null;
+
+    // Запись о попытке. Она копится по ходу этапа и уходит один раз в конце:
+    // запросы посреди игры мешали бы играть на плохой связи, а нам нужен
+    // только итог.
+    // Флажок сбрасываем нарочно: Phaser переиспользует объект сцены между
+    // этапами, и без сброса «запись уже закрыта» переезжало на следующий этап,
+    // а его статистика не уходила никуда.
+    this.забегЗакрыт = false;
+
+    const место = routeOf(this.levelIndex);
+    this.забег = начатьЗабег({
+      маршрут: место.route + 1,
+      этап: место.stage + 1,
+      уровеньГероя: this.levelAtStart,
+      жизней: this.maxLives,
+      способности: ['speedBoost', 'doubleJump', 'cloak', 'slingshot'].filter((и) => hasItem(и)),
+      монетВсего: this.totalCoins,
+    });
+
+    // Ушли из этапа, не доиграв: закрыли вкладку, вышли в меню, начали
+    // заново. Такие попытки тоже важны — по ним видно, где игру бросают.
+    this.events.once('shutdown', () => this.закрытьЗабег('quit'));
     this.cameras.main.fadeIn(250);
 
     platform.gameplayStart();
@@ -306,7 +329,9 @@ export class GameScene extends Phaser.Scene {
           case '^': {
             this.add.image(cx, top + TILE - 19, 'spike').setDepth(2);
             // Зона урона уже картинки: касание кончиком не должно убивать.
-            this.hazards.push(new Phaser.Geom.Rectangle(cx - 24, top + TILE - 26, 48, 26));
+            const колючки = new Phaser.Geom.Rectangle(cx - 24, top + TILE - 26, 48, 26);
+            колючки.вид = 'spike';
+            this.hazards.push(колючки);
             break;
           }
 
@@ -331,7 +356,9 @@ export class GameScene extends Phaser.Scene {
               repeat: -1,
               ease: 'Sine.easeInOut',
             });
-            this.hazards.push(new Phaser.Geom.Rectangle(cx - 22, top + TILE - 50, 44, 50));
+            const огонь = new Phaser.Geom.Rectangle(cx - 22, top + TILE - 50, 44, 50);
+            огонь.вид = 'fire';
+            this.hazards.push(огонь);
             break;
           }
 
@@ -596,6 +623,10 @@ export class GameScene extends Phaser.Scene {
 
   addCoin(x, y) {
     const coin = this.coins.create(x, y, 'coin').setDepth(2);
+    // Номер монетки по порядку сборки карты. Карта у всех одинаковая, поэтому
+    // одного номера хватает, чтобы потом понять, какую именно не взяли, — и
+    // координаты хранить не нужно.
+    coin.номер = this.coins.getChildren().length - 1;
     coin.body.setCircle(15, 5, 5);
     // Монетка покачивается и «крутится» сжатием по горизонтали.
     this.tweens.add({
@@ -664,10 +695,10 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, (_p, coin) => this.collectCoin(coin));
     this.physics.add.overlap(this.player, this.treats, (_p, treat) => this.collectTreat(treat));
     this.physics.add.overlap(this.player, this.heartDrops, (_p, h) => this.collectHeart(h));
-    this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now));
+    this.physics.add.overlap(this.player, this.quills, () => this.hurt(this.time.now, false, 'quill'));
     // Валун только задевает — оттолкнуть игрока он не должен, иначе им можно
     // проехаться до финиша.
-    this.physics.add.overlap(this.player, this.boulders, () => this.hurt(this.time.now));
+    this.physics.add.overlap(this.player, this.boulders, () => this.hurt(this.time.now, false, 'boulder'));
     this.physics.add.collider(this.boulders, this.solids);
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
@@ -1476,7 +1507,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const hz of this.hazards) {
       if (Phaser.Geom.Intersects.RectangleToRectangle(rect, hz)) {
-        this.hurt(this.time.now);
+        this.hurt(this.time.now, false, hz.вид ?? 'hazard');
         return;
       }
     }
@@ -1486,7 +1517,7 @@ export class GameScene extends Phaser.Scene {
     for (const tongue of this.tongues) {
       if (!tongue.active) continue;
       if (Phaser.Geom.Intersects.RectangleToRectangle(rect, tongue.getBounds())) {
-        this.hurt(this.time.now);
+        this.hurt(this.time.now, false, 'tongue');
         return;
       }
     }
@@ -1584,7 +1615,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.hurt(time);
+    this.hurt(time, false, enemy.kind);
   }
 
   /**
@@ -2122,7 +2153,7 @@ export class GameScene extends Phaser.Scene {
         шип.y += s.vy * dt;
 
         if (Phaser.Geom.Intersects.RectangleToRectangle(игрок, шип.getBounds())) {
-          this.hurt(time);
+          this.hurt(time, false, 'dropSpike');
           s.state = 'done';
           this.puff(шип.x, шип.y + шип.height, 0xb9c4cf);
           шип.destroy();
@@ -2203,10 +2234,11 @@ export class GameScene extends Phaser.Scene {
    * @param {number} time игровое время
    * @param {boolean} fromPit падение в пропасть — от него неуязвимость не спасает
    */
-  hurt(time, fromPit = false) {
+  hurt(time, fromPit = false, от = fromPit ? 'pit' : '?') {
     if (this.finished) return;
     if (!fromPit && time < this.invulnUntil) return;
 
+    отметитьСмерть(this.забег, { мс: this.stageMs, x: this.player.x, y: this.player.y, от });
     this.lives -= 1;
     this.lostLife = true;
     this.invulnUntil = time + LIVES.invulnMs;
@@ -2262,6 +2294,8 @@ export class GameScene extends Phaser.Scene {
     const stageXp = stars > 0 ? recordStage(this.levelIndex, { percent, stars, timeMs: this.stageMs }) : 0;
     flush();
 
+    this.закрытьЗабег('finish', stars);
+
     stars > 0 ? sfx.win() : sfx.fail();
     this.showResult({ stars, percent, stageXp, failedBy: stars > 0 ? null : 'coins' }, 400);
   }
@@ -2279,11 +2313,39 @@ export class GameScene extends Phaser.Scene {
     this.saveStageStats();
     flush();
 
+    this.закрытьЗабег(причина);
+
     sfx.fail();
     this.showResult(
       { stars: 0, percent: this.totalCoins ? this.coinsCollected / this.totalCoins : 0, stageXp: 0, failedBy: причина },
       700
     );
+  }
+
+  /**
+   * Закрыть запись о попытке и отправить.
+   *
+   * Несобранные монетки считаем прямо здесь: те, что остались на карте, — это
+   * и есть ответ на вопрос «какие именно не берут». Монетка, которую за сотни
+   * забегов не взял никто, почти наверняка недостижима, и это ошибка карты, а
+   * не привычка игроков.
+   */
+  закрытьЗабег(исход, звёзд = 0) {
+    if (!this.забег || this.забегЗакрыт) return;
+    this.забегЗакрыт = true;
+
+    const мимо = [];
+    this.coins.children.iterate((c) => {
+      if (c && c.active && c.номер !== undefined) мимо.push(c.номер);
+    });
+
+    закончитьЗабег(this.забег, {
+      исход,
+      мс: this.stageMs,
+      монетВзято: this.coinsCollected,
+      монетМимо: мимо,
+      звёзд,
+    });
   }
 
   saveStageStats() {
