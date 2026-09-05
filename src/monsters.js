@@ -105,6 +105,32 @@ function hop(scene, m, time) {
   m.nextHopAt = time + m.hopEvery;
 }
 
+/**
+ * Панголин сворачивается в клубок.
+ *
+ * В клубке он неуязвим: ни прыжок, ни рогатка, ни касание его не берут — от
+ * катящегося клубка можно только уйти. Поэтому направление выбирается один
+ * раз, в момент превращения: дальше он катится, не подруливая.
+ */
+function свернуться(scene, m) {
+  m.state = 'roll';
+  m.броня = true;
+  m.dir = scene.player.x < m.x ? -1 : 1;
+  m.setTexture(m.type.ballKey).setFlipX(false);
+  const b = m.type.ballBody;
+  m.body.setSize(b.w, b.h).setOffset(b.ox, b.oy);
+  scene.убратьТревогу(m);
+  scene.puff(m.x, m.y, 0xd8c0b8);
+}
+
+/** Панголин разворачивается обратно в зверя — целого или оглушённого. */
+function развернуться(m, текстура) {
+  m.броня = false;
+  m.setTexture(текстура).setAngle(0);
+  const b = m.type.body;
+  m.body.setSize(b.w, b.h).setOffset(b.ox, b.oy);
+}
+
 export const MONSTERS = {
   // ── Простые ────────────────────────────────────────────────────────────
   m: {
@@ -394,6 +420,124 @@ export const MONSTERS = {
         return;
       }
       hop(scene, m, time);
+    },
+  },
+
+  p: {
+    /**
+     * Панголин. Ходит медленно, но заметив героя — сворачивается в клубок и
+     * катится быстрее, чем тот бегает.
+     *
+     * Его нельзя переждать и нельзя перестрелять: в клубке он неуязвим и не
+     * останавливается. Останавливает его только край обрыва или стена, и
+     * ровно в этот миг он и уязвим — оглушённый после удара он лежит секунду,
+     * и это единственное окно, чтобы с ним покончить. Отсюда и весь замысел:
+     * не «убей монстра», а «заведи его в стену».
+     *
+     * Восклицательный знак над головой — обещание игроку: между «заметил» и
+     * «покатился» есть семь десятых секунды, и их хватает, чтобы отпрыгнуть.
+     */
+    key: 'pangolin',
+    ballKey: 'pangolin-ball',
+    stunKey: 'pangolin-stunned',
+    xp: XP.monster.hard,
+    stompable: true,
+    ground: true,
+    body: { w: 50, h: 30, ox: 11, oy: 22 },
+    ballBody: { w: 46, h: 44, ox: 15, oy: 9 },
+    speed: 120, // половина хода героя
+    // Участок короткий нарочно: панголин ценен не прогулкой, а разгоном, и
+    // стоять он должен там, куда его поставили, — перед выступом.
+    patrolRange: 300,
+    rollSpeed: 288, // и вдвое с лишним быстрее в клубке — 1.2 от хода героя
+    sight: 600,
+    curlMs: 700, // столько думает, прежде чем свернуться
+    edgeMs: 1000, // столько стоит на краю обрыва
+    stunMs: 1000, // столько лежит после удара о стену
+    calmMs: 1200, // передышка, чтобы он не сворачивался тут же снова
+    update(scene, m, time) {
+      const игрок = scene.player;
+
+      // ── Лежит оглушённый ────────────────────────────────────────────
+      if (m.state === 'stun') {
+        m.setVelocityX(0);
+        if (time < m.stunUntil) return;
+        развернуться(m, m.type.key);
+        m.state = 'back';
+        return;
+      }
+
+      // ── Замер на краю обрыва ────────────────────────────────────────
+      if (m.state === 'edge') {
+        m.setVelocityX(0);
+        if (time < m.edgeUntil) return;
+        развернуться(m, m.type.key);
+        m.state = 'back';
+        return;
+      }
+
+      // ── Возвращается на свой маршрут ────────────────────────────────
+      if (m.state === 'back') {
+        const куда = (m.homeX ?? m.x) - m.x;
+        // Упёрся по дороге назад — значит, дошёл: толкаться в стену до конца
+        // этапа он не должен.
+        if (Math.abs(куда) < 24 || m.body.blocked.left || m.body.blocked.right) {
+          m.state = 'walk';
+          m.readyAt = time + m.calmMs;
+          m.setVelocityX(0);
+          return;
+        }
+        m.dir = куда < 0 ? -1 : 1;
+        m.setVelocityX(m.dir * m.speed);
+        m.setFlipX(m.dir < 0);
+        return;
+      }
+
+      // ── Катится ─────────────────────────────────────────────────────
+      if (m.state === 'roll') {
+        m.setVelocityX(m.dir * m.rollSpeed);
+        m.angle += m.dir * 9;
+
+        // Врезался в твёрдое — оглушение и звёздочки, как у осы.
+        if (m.dir > 0 ? m.body.blocked.right : m.body.blocked.left) {
+          m.state = 'stun';
+          m.stunUntil = time + m.stunMs;
+          m.setVelocity(0, 0);
+          развернуться(m, m.type.stunKey);
+          scene.puff(m.x, m.y, 0xffe08a);
+          scene.spinDizzyStars(m, m.stunMs);
+          return;
+        }
+
+        // Докатился до обрыва — встал на краю.
+        const впереди = m.x + m.dir * 40;
+        if (m.body.blocked.down && !scene.isSolidAtPixel(впереди, m.body.bottom + 10)) {
+          m.state = 'edge';
+          m.edgeUntil = time + m.edgeMs;
+          m.setVelocityX(0);
+        }
+        return;
+      }
+
+      // ── Заметил героя и вот-вот свернётся ───────────────────────────
+      if (m.state === 'alert') {
+        m.setVelocityX(0);
+        if (time >= m.curlAt) свернуться(scene, m);
+        return;
+      }
+
+      // ── Обычный ход ─────────────────────────────────────────────────
+      patrol(scene, m);
+
+      if (time < (m.readyAt || 0)) return;
+      const наОдномУровне = Math.abs(игрок.y - m.y) < 200;
+      if (Math.abs(игрок.x - m.x) > m.sight || !наОдномУровне) return;
+
+      m.state = 'alert';
+      m.curlAt = time + m.curlMs;
+      m.setVelocityX(0);
+      m.setFlipX(игрок.x < m.x);
+      scene.показатьТревогу(m, m.curlMs);
     },
   },
 

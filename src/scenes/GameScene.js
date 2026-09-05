@@ -1480,7 +1480,10 @@ export class GameScene extends Phaser.Scene {
   updateMonsters(time) {
     const шаг = (m) => {
       if (!m || !m.active || !m.type) return;
-      if (m.type.ground && m.dir) this.stepOverLedge(m, m.dir);
+      // Клубок на ступеньку не заходит: удар о неё — единственный способ
+      // его остановить, и заботливый «шаг наверх» отнял бы у игрока этот
+      // способ вовсе.
+      if (m.type.ground && m.dir && !m.броня) this.stepOverLedge(m, m.dir);
       m.type.update?.(this, m, time);
     };
     this.walkers.children.iterate(шаг);
@@ -1704,6 +1707,14 @@ export class GameScene extends Phaser.Scene {
   touchEnemy(enemy) {
     if (!enemy.active || this.finished) return;
     const time = this.time.now;
+
+    // Панголин в клубке — уже не монстр, а снаряд: его не берут ни прыжок,
+    // ни рогатка, ни касание. Платит только герой. Уязвимым он становится
+    // там, где остановился: у обрыва или оглушённым после удара о стену.
+    if (enemy.броня) {
+      this.hurt(time, false, enemy.kind);
+      return;
+    }
 
     // Прыжок сверху — как и раньше: монстрик исчезает, капибара отскакивает и
     // не теряет жизнь. Это награда за точный прыжок.
@@ -2371,7 +2382,14 @@ export class GameScene extends Phaser.Scene {
   /** Монетка из рогатки долетела до монстра. */
   pebbleHit(pebble, enemy) {
     if (!pebble.active || !enemy.active) return;
+    const x = pebble.x;
+    const y = pebble.y;
     pebble.destroy();
+    // По броне монетка только щёлкает.
+    if (enemy.броня) {
+      this.puff(x, y, 0xd8c0b8);
+      return;
+    }
     this.neutralize(enemy);
   }
 
@@ -2381,6 +2399,7 @@ export class GameScene extends Phaser.Scene {
    * всё равно зачтутся.
    */
   neutralize(enemy) {
+    this.убратьТревогу(enemy);
     enemy.disableBody(true, true);
     this.monstersDown += 1;
     this.monsterXp += enemy.xpValue ?? XP.monster.easy;
@@ -2756,6 +2775,31 @@ export class GameScene extends Phaser.Scene {
         });
       });
     }
+  }
+
+  /**
+   * Восклицательный знак над монстром: он заметил героя.
+   *
+   * Без него превращение панголина выглядело бы как случайность. Знак — это
+   * обещание: пока он дрожит, ещё можно уйти.
+   */
+  показатьТревогу(m, мс) {
+    this.убратьТревогу(m);
+    const знак = this.add.image(m.x + 24, m.y - 46, 'alert').setDepth(6).setScale(0.9);
+    this.tweens.add({ targets: знак, x: знак.x + 5, duration: 70, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: знак, scale: 1.05, duration: 240, yoyo: true, repeat: -1 });
+    m.знак = знак;
+    // Подстраховка: если превращение почему-то не случится, знак не останется
+    // висеть над пустым местом до конца этапа.
+    this.time.delayedCall(мс + 600, () => this.убратьТревогу(m));
+  }
+
+  /** Снять знак: монстр превратился, погиб или этап кончился. */
+  убратьТревогу(m) {
+    if (!m || !m.знак) return;
+    this.tweens.killTweensOf(m.знак);
+    m.знак.destroy();
+    m.знак = null;
   }
 
   /** Всплывающая надпись над предметом: сколько опыта только что дали. */

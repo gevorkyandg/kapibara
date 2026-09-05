@@ -349,6 +349,106 @@ export function createTextures(scene) {
   g.strokePoints([{ x: 2, y: 5 }, { x: 16, y: 8 }, { x: 2, y: 11 }], true);
   bake(g, 'quill', 18, 16);
 
+  // ── Панголин ──────────────────────────────────────────────────────────
+  //
+  // Рисуется в трёх видах: ходячий, свёрнутый в клубок и оглушённый. Холст у
+  // всех трёх одинаковый (76×56), иначе при смене вида спрайт дёргался бы по
+  // высоте: центр остаётся на месте, а размеры холста меняются.
+  //
+  // Чешуя — главная его примета, поэтому она везде одна и та же: ряды
+  // округлых пластинок внахлёст, светлее к спине и темнее к брюху.
+  const чешуйка = (x, y, w, h, светлая) => {
+    g.fillStyle(светлая ? 0xa8837c : 0x8a6760, 1);
+    g.lineStyle(2, 0x5d423c, 1);
+    g.fillRoundedRect(x, y, w, h, h / 2);
+    g.strokeRoundedRect(x, y, w, h, h / 2);
+  };
+
+  // Ходячий: длинная морда вперёд, спина горбом, хвост волочится.
+  g.fillStyle(0x8a6760, 1);
+  g.lineStyle(4, 0x5d423c, 1);
+  g.fillEllipse(30, 20, 30, 12); // хвост
+  g.strokeEllipse(30, 20, 30, 12);
+  g.fillEllipse(36, 30, 50, 30); // туловище
+  g.strokeEllipse(36, 30, 50, 30);
+
+  // Лапки — короткие и толстые, как у настоящего панголина.
+  g.fillStyle(0x6f524c, 1);
+  g.lineStyle(3, 0x452f2b, 1);
+  [20, 34, 46].forEach((x) => {
+    g.fillRoundedRect(x, 40, 10, 12, 5);
+    g.strokeRoundedRect(x, 40, 10, 12, 5);
+  });
+
+  // Чешуя по спине: три ряда внахлёст.
+  for (let i = 0; i < 5; i++) чешуйка(16 + i * 9, 15 + Math.max(0, 2 - i) * 2, 12, 9, true);
+  for (let i = 0; i < 5; i++) чешуйка(14 + i * 9, 24, 12, 9, false);
+  for (let i = 0; i < 4; i++) чешуйка(18 + i * 9, 32, 11, 8, true);
+
+  // Морда: вытянутый конус вправо, носик тёмной каплей.
+  g.fillStyle(0xbfa29a, 1);
+  g.lineStyle(3, 0x5d423c, 1);
+  g.fillEllipse(63, 32, 30, 15);
+  g.strokeEllipse(63, 32, 30, 15);
+  g.fillStyle(0x452f2b, 1);
+  g.fillCircle(76, 33, 4);
+  eyes(56, 56, 26, 4); // глаз один: смотрит вбок
+  bake(g, 'pangolin', 82, 56);
+
+  // Клубок: та же чешуя, свёрнутая кольцами. Внутри виден краешек морды —
+  // чтобы игрок понимал, что катится тот же зверь, а не камень.
+  g.fillStyle(0x8a6760, 1);
+  g.lineStyle(4, 0x5d423c, 1);
+  g.fillCircle(38, 28, 25);
+  g.strokeCircle(38, 28, 25);
+  g.fillStyle(0xbfa29a, 1);
+  g.lineStyle(3, 0x5d423c, 1);
+  g.fillEllipse(38, 40, 26, 13); // подвёрнутая морда
+  g.strokeEllipse(38, 40, 26, 13);
+  for (let ряд = 0; ряд < 3; ряд++) {
+    const r = 20 - ряд * 6;
+    const сколько = 8 - ряд * 2;
+    for (let i = 0; i < сколько; i++) {
+      const a = (i / сколько) * Math.PI * 2 + ряд * 0.4;
+      чешуйка(38 + Math.cos(a) * r - 6, 28 + Math.sin(a) * r - 4, 12, 9, ряд % 2 === 0);
+    }
+  }
+  bake(g, 'pangolin-ball', 82, 56);
+
+  // Оглушённый: лежит на боку, лапки кверху, глаза крестиками.
+  g.fillStyle(0x8a6760, 1);
+  g.lineStyle(4, 0x5d423c, 1);
+  g.fillEllipse(36, 36, 52, 26);
+  g.strokeEllipse(36, 36, 52, 26);
+  g.fillStyle(0x6f524c, 1);
+  g.lineStyle(3, 0x452f2b, 1);
+  [22, 36, 48].forEach((x) => {
+    g.fillRoundedRect(x, 18, 9, 12, 4);
+    g.strokeRoundedRect(x, 18, 9, 12, 4);
+  });
+  for (let i = 0; i < 4; i++) чешуйка(16 + i * 10, 30, 12, 9, i % 2 === 0);
+  g.fillStyle(0xbfa29a, 1);
+  g.lineStyle(3, 0x5d423c, 1);
+  g.fillEllipse(64, 38, 28, 14);
+  g.strokeEllipse(64, 38, 28, 14);
+  g.lineStyle(3, 0x452f2b, 1);
+  [[54, 34], [62, 34]].forEach(([x, y]) => {
+    g.lineBetween(x - 4, y - 4, x + 4, y + 4);
+    g.lineBetween(x + 4, y - 4, x - 4, y + 4);
+  });
+  bake(g, 'pangolin-stunned', 82, 56);
+
+  // Восклицательный знак: монстр заметил героя. Без таблички и подложки —
+  // это не предупреждение игроку, а мысль монстра, и она должна читаться за
+  // долю секунды.
+  g.fillStyle(0xffd34d, 1);
+  g.lineStyle(4, 0x5a3a22, 1);
+  g.fillRoundedRect(6, 2, 12, 24, 6);
+  g.strokeRoundedRect(6, 2, 12, 24, 6);
+  g.fillCircle(12, 34, 7);
+  g.strokeCircle(12, 34, 7);
+  bake(g, 'alert', 24, 44);
+
   // Оса: темнее пчелы, брови строгие (ТЗ), улыбка на месте.
   g.fillStyle(0xdff3ff, 0.85);
   g.lineStyle(3, 0x8fb8cc, 1);
