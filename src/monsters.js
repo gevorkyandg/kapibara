@@ -115,6 +115,7 @@ function hop(scene, m, time) {
 function свернуться(scene, m) {
   m.state = 'roll';
   m.броня = true;
+  m.rollFrom = m.x;
   m.dir = scene.player.x < m.x ? -1 : 1;
   m.setTexture(m.type.ballKey).setFlipX(false);
   const b = m.type.ballBody;
@@ -209,6 +210,10 @@ export const MONSTERS = {
     key: 'porcupine',
     xp: XP.monster.hard,
     stompable: false,
+    // Иглы во все стороны — значит, и касание его не берёт: подойти к
+    // дикобразу вплотную и остаться целым нельзя ни герою, ни ему. Снимается
+    // рогаткой.
+    колючий: true,
     ground: true,
     body: { w: 46, h: 46, ox: 11, oy: 14 },
     speed: 0,
@@ -444,24 +449,33 @@ export const MONSTERS = {
      * «покатился» есть семь десятых секунды, и их хватает, чтобы отпрыгнуть.
      */
     key: 'pangolin',
+    runKey: 'pangolin-run',
     ballKey: 'pangolin-ball',
     stunKey: 'pangolin-stunned',
     xp: XP.monster.hard,
     stompable: true,
     ground: true,
-    body: { w: 50, h: 30, ox: 11, oy: 22 },
-    ballBody: { w: 46, h: 44, ox: 15, oy: 9 },
+    body: { w: 44, h: 30, ox: 27, oy: 24 },
+    ballBody: { w: 46, h: 44, ox: 25, oy: 10 },
     speed: 120, // половина хода героя
     // Участок короткий нарочно: панголин ценен не прогулкой, а разгоном, и
     // стоять он должен там, куда его поставили, — перед выступом.
     patrolRange: 300,
     rollSpeed: 288, // и вдвое с лишним быстрее в клубке — 1.2 от хода героя
     sight: 500, // видит на 500 в обе стороны — и вплотную тоже
+    rollRange: 1200, // дальше этого клубок не катится
     curlMs: 700, // столько думает, прежде чем свернуться
     edgeMs: 1000, // столько стоит на краю обрыва
     stunMs: 1000, // столько лежит после удара о стену
     update(scene, m, time) {
       const игрок = scene.player;
+
+      // Два кадра бега, восемь раз в секунду: по ножкам видно, что зверь
+      // перебирает ими, а не едет по земле.
+      const перебирает = () => {
+        const ключ = Math.floor(time / 130) % 2 ? m.type.runKey : m.type.key;
+        if (m.texture.key !== ключ) m.setTexture(ключ);
+      };
 
       // ── Лежит оглушённый ────────────────────────────────────────────
       if (m.state === 'stun') {
@@ -500,6 +514,16 @@ export const MONSTERS = {
         // Докатился до обрыва — встал на краю.
         const впереди = m.x + m.dir * 40;
         if (m.body.blocked.down && !scene.isSolidAtPixel(впереди, m.body.bottom + 10)) {
+          m.state = 'edge';
+          m.edgeUntil = time + m.edgeMs;
+          m.setVelocityX(0);
+          return;
+        }
+
+        // Разгон не бесконечен: 1200 пикселей — и клубок сам встаёт, как у
+        // обрыва. Иначе один панголин уезжает через полэтапа и попадается
+        // игроку там, где его никто не ставил.
+        if (Math.abs(m.x - (m.rollFrom ?? m.x)) >= m.rollRange) {
           m.state = 'edge';
           m.edgeUntil = time + m.edgeMs;
           m.setVelocityX(0);
@@ -544,11 +568,13 @@ export const MONSTERS = {
         m.dir = куда < 0 ? -1 : 1;
         m.setVelocityX(m.dir * m.speed);
         m.setFlipX(m.dir < 0);
+        перебирает();
         return;
       }
 
       // ── Обычный ход ─────────────────────────────────────────────────
       patrol(scene, m);
+      перебирает();
     },
   },
 
