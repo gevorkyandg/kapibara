@@ -249,9 +249,15 @@ export class GameScene extends Phaser.Scene {
         const top = row * TILE;
 
         switch (ch) {
-          case '#':
-            this.solids.create(cx, cy, `ground-${th}`);
+          case '#': {
+            // Кайма травы только у той клетки, что видна сверху. Ниже кладём
+            // голую землю: иначе толща под горкой полосатится, и склон
+            // читается лесенкой, а не склоном.
+            const сверху = row > 0 ? this.map[row - 1][col] : ' ';
+            const закрыта = сверху === '#' || сверху === '/' || сверху === '\\';
+            this.solids.create(cx, cy, закрыта ? `dirt-${th}` : `ground-${th}`);
             break;
+          }
 
           case '=':
             // Платформа занимает верхние 26 px клетки.
@@ -439,9 +445,18 @@ export class GameScene extends Phaser.Scene {
             break;
           }
 
-          case 'P':
+          case 'P': {
             this.startPos = { x: cx, y: cy };
+
+            // Стена за спиной. Побежав назад, игрок иначе сходит с края карты
+            // и теряет жизнь ни за что. Высоту берём с запасом на самого
+            // прокачанного героя: двойной прыжок на 15-м уровне поднимает на
+            // 432 px, стена в девять клеток выше вдвое.
+            const стена = this.add.rectangle(cx - TILE * 2, top - TILE * 4, TILE, TILE * 9);
+            this.physics.add.existing(стена, true);
+            this.solids.add(стена);
             break;
+          }
 
           default:
             // Всё остальное — монстры из monsters.js
@@ -1064,13 +1079,40 @@ export class GameScene extends Phaser.Scene {
       this.player.setVelocity(0, 0);
     }
 
-    // Точка возврата: последнее место, где капибара спокойно стояла на земле.
+    // Точка возврата: последнее место, где капибара спокойно стояла на
+    // НАСТОЯЩЕЙ земле.
+    //
+    // Падающая площадка точкой возврата быть не может: к моменту возврата её
+    // уже нет, и капибара падает снова — и так до последней жизни. То же с
+    // движущейся: она уедет. Поэтому проверяем не «стояли ли мы», а «есть ли
+    // под этим местом опора, которая никуда не денется».
     if (onFloor && time - this.lastCheckpointAt > 400 && Math.abs(body.velocity.y) < 40) {
       this.lastCheckpointAt = time;
       const x = this.player.x;
       const y = this.player.y - 10;
-      if (!this.overlapsSolid(x, y)) this.checkpoint = { x, y };
+      if (!this.overlapsSolid(x, y) && this.надёжнаяОпора(x, body.bottom)) {
+        this.checkpoint = { x, y };
+      }
     }
+  }
+
+  /**
+   * Есть ли под этим местом опора, которая никуда не денется.
+   *
+   * Земля, площадка и склон остаются на месте всегда. Падающая площадка
+   * рушится, движущаяся уезжает, облачко лопается, пружина выстреливает —
+   * возвращать игрока на них нельзя.
+   */
+  надёжнаяОпора(x, низ) {
+    const col = Math.floor(x / TILE);
+    if (col < 0 || col >= this.cols) return false;
+    const отРяда = Math.max(0, Math.floor(низ / TILE) - 1);
+    for (let r = отРяда; r < this.rows; r++) {
+      const ch = this.map[r][col];
+      if (ch === '#' || ch === '=' || ch === '/' || ch === '\\') return true;
+      if (ch === 'x' || ch === '-' || ch === '|' || ch === 'c' || ch === 's') return false;
+    }
+    return false;
   }
 
   handleMovement(time, onFloor) {
