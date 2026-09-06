@@ -9,6 +9,7 @@
  */
 
 import { platform } from './platform/index.js';
+import { LEVELS } from './levels.js';
 import { XP, levelFromXp, levelBonuses, MAX_LEVEL } from './progression.js';
 import { ABILITIES, MIN_COOLDOWN } from './config.js';
 
@@ -227,11 +228,28 @@ export function buyExtraLife(price) {
  *
  * @returns {number} сколько опыта начислено за этап
  */
-export function recordStage(index, { percent, stars, timeMs }) {
-  const key = String(index);
+/**
+ * Под каким ключом хранится итог этапа.
+ *
+ * У своих этапов ключ по названию, а не по номеру. Номера они занимают сразу
+ * за кампанией, и если кампания однажды подрастёт, её новый этап унаследовал
+ * бы чужие звёзды и время — итог загруженной пробы, которой давно нет.
+ */
+function ключЭтапа(index) {
+  const этап = LEVELS[index];
+  return этап?.свой ? `свой:${этап.name}` : String(index);
+}
+
+export function recordStage(index, { percent, stars, timeMs, опыт }) {
+  const key = ключЭтапа(index);
   const prev = data.levels[key] || { stars: 0, best: 0, bestTime: 0 };
 
-  const gainedXp = Math.max(0, (XP.stage[stars] || 0) - (XP.stage[prev.stars] || 0));
+  // Сколько платит этап, решает он сам, если у него об этом сказано: длинный
+  // и трудный должен давать больше короткого. Не сказано — общая таблица.
+  // Доплачиваем разницу: вернулся за третьей звездой — получи только то, чего
+  // не хватало, а не всю сумму заново.
+  const таблица = Array.isArray(опыт) ? опыт : XP.stage;
+  const gainedXp = Math.max(0, (таблица[stars] || 0) - (таблица[prev.stars] || 0));
 
   data.levels[key] = {
     stars: Math.max(prev.stars, stars),
@@ -247,12 +265,15 @@ export function recordStage(index, { percent, stars, timeMs }) {
 }
 
 export function getLevelResult(index) {
-  return data.levels[String(index)] || { stars: 0, best: 0, bestTime: 0 };
+  return data.levels[ключЭтапа(index)] || { stars: 0, best: 0, bestTime: 0 };
 }
 
 /** Первый этап открыт всегда, следующий — когда предыдущий пройден. */
 export function isLevelUnlocked(index) {
   if (index === 0) return true;
+  // Загруженные этапы не запираются: их порядок — порядок загрузки, а не
+  // замысел кампании, и требовать звезду с предыдущего было бы бессмыслицей.
+  if (LEVELS[index]?.свой) return true;
   return getLevelResult(index - 1).stars > 0;
 }
 

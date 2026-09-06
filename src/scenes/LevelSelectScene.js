@@ -160,6 +160,62 @@ export class LevelSelectScene extends Phaser.Scene {
       fill: COLORS.panel,
       edge: COLORS.panelEdge,
     });
+
+    // Загрузка своих этапов — инструмент разработки, как линейка координат.
+    // В собранной игре этой ветки нет: игроку доезжает готовое, уже вписанное
+    // в кампанию, а не чужой файл из папки «Загрузки».
+    if (import.meta.env.DEV) {
+      makeButton(
+        this,
+        GAME_WIDTH - 190,
+        GAME_HEIGHT - 56,
+        300,
+        64,
+        'Загрузить этап',
+        () => this.загрузитьЭтап(),
+        { fill: COLORS.panel, edge: COLORS.panelEdge }
+      );
+    }
+  }
+
+  /**
+   * Взять файл этапа из редактора.
+   *
+   * После удачной загрузки перезапускаем страницу: список этапов собирается
+   * при чтении модуля, и честнее пересобрать его целиком, чем чинить по
+   * кусочкам уже нарисованный экран.
+   */
+  загрузитьЭтап() {
+    if (!import.meta.env.DEV) return;
+    const поле = document.createElement('input');
+    поле.type = 'file';
+    поле.accept = '.json,application/json';
+    поле.addEventListener('change', async () => {
+      const файл = поле.files?.[0];
+      if (!файл) return;
+      try {
+        const { добавить } = await import('../свои-этапы.js');
+        добавить(await файл.text());
+        location.reload();
+      } catch (е) {
+        this.сказать(`Не вышло: ${е.message}`);
+      }
+    });
+    поле.click();
+  }
+
+  /** Сообщение внизу экрана — только для разработки. */
+  сказать(текст) {
+    this.весть?.destroy();
+    this.весть = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 118, текст, {
+        fontFamily: FONT,
+        fontSize: '26px',
+        color: COLORS.ink,
+        backgroundColor: '#fff6e0',
+        padding: { x: 12, y: 6 },
+      })
+      .setOrigin(0.5);
   }
 
   // ── Экран этапов одного маршрута ────────────────────────────────────────
@@ -247,6 +303,25 @@ export class LevelSelectScene extends Phaser.Scene {
         () => this.scene.start('GameScene', { levelIndex: i })
       );
       if (!открыт) btn.setEnabled(false);
+
+      // Свой этап можно выкинуть прямо отсюда: файл остаётся на диске, из
+      // игры уходит только запись.
+      if (import.meta.env.DEV && level.свой) {
+        makeButton(
+          this,
+          x + cardW / 2 - 30,
+          y - cardH / 2 + 30,
+          44,
+          44,
+          '×',
+          async () => {
+            const { убрать } = await import('../свои-этапы.js');
+            убрать(level.name);
+            location.reload();
+          },
+          { fill: COLORS.panel, edge: COLORS.panelEdge }
+        );
+      }
     });
 
     makeButton(

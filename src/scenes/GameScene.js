@@ -245,14 +245,20 @@ export class GameScene extends Phaser.Scene {
     this.монетыВзяты = new Set();
 
     const место = routeOf(this.levelIndex);
-    this.забег = начатьЗабег({
-      маршрут: место.route + 1,
-      этап: место.stage + 1,
-      уровеньГероя: this.levelAtStart,
-      жизней: this.maxLives,
-      способности: ['speedBoost', 'doubleJump', 'cloak', 'slingshot'].filter((и) => hasItem(и)),
-      монетВсего: this.totalCoins,
-    });
+    // Свои этапы в статистику не идут: сорок проб трудного места смешались
+    // бы с настоящими забегами игроков, и цифры перестали бы что-то значить.
+    this.забег = LEVELS[this.levelIndex]?.свой
+      ? null
+      : начатьЗабег({
+          маршрут: место.route + 1,
+          этап: место.stage + 1,
+          уровеньГероя: this.levelAtStart,
+          жизней: this.maxLives,
+          способности: ['speedBoost', 'doubleJump', 'cloak', 'slingshot'].filter((и) =>
+            hasItem(и)
+          ),
+          монетВсего: this.totalCoins,
+        });
 
     // Ушли из этапа, не доиграв: закрыли вкладку, вышли в меню, начали
     // заново. Такие попытки тоже важны — по ним видно, где игру бросают.
@@ -2497,7 +2503,16 @@ export class GameScene extends Phaser.Scene {
 
     // Опыт за этап — только за прирост звёзд, чтобы лёгкий этап нельзя было
     // фармить бесконечно. Опыт за монстров и сладости уже начислен по ходу.
-    const stageXp = stars > 0 ? recordStage(this.levelIndex, { percent, stars, timeMs: this.stageMs }) : 0;
+    const своя = LEVELS[this.levelIndex]?.опытЗаЗвёзды;
+    const stageXp =
+      stars > 0
+        ? recordStage(this.levelIndex, {
+            percent,
+            stars,
+            timeMs: this.stageMs,
+            опыт: Array.isArray(своя) ? [0, ...своя] : null,
+          })
+        : 0;
     flush();
 
     this.закрытьЗабег('finish', stars);
