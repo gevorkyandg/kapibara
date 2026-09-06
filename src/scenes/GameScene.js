@@ -762,8 +762,11 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.boulders, this.solids);
     this.physics.add.overlap(this.player, this.walkers, (_p, e) => this.touchEnemy(e));
     this.physics.add.overlap(this.player, this.flyers, (_p, e) => this.touchEnemy(e));
-    // Платформы, по которым можно ходить
-    this.physics.add.collider(this.player, this.movers);
+    // Платформы, по которым можно ходить. Сверху — опора, снизу — пустое
+    // место: площадка проходит сквозь капибару.
+    this.physics.add.collider(this.player, this.movers, null, (игрок, площадка) =>
+      this.сверхуПлощадки(игрок, площадка)
+    );
     this.physics.add.collider(this.player, this.fallers, (_p, weak) => this.touchFaller(weak));
     this.physics.add.collider(this.walkers, this.movers);
 
@@ -2376,6 +2379,22 @@ export class GameScene extends Phaser.Scene {
    * Капибара едет вместе с движущейся платформой. Arcade сам этого не делает:
    * платформа уезжает из-под ног, и герой остаётся висеть на месте.
    */
+  /**
+   * Считать ли столкновение с движущейся площадкой.
+   *
+   * Опорой она служит только сверху. Спускаясь на стоящего под ней игрока,
+   * площадка упиралась в него и вставала намертво: тело у неё неподвижное,
+   * разъезд возвращал её обратно на кадр, скорость гнала вниз — и так до
+   * бесконечности. Теперь снизу её попросту нет, и она проходит мимо.
+   *
+   * Мерка — ноги выше её верха: тогда и стоящий на площадке едет с ней вверх
+   * по-прежнему, и прыгающий снизу пролетает насквозь, чтобы приземлиться
+   * сверху.
+   */
+  сверхуПлощадки(игрок, площадка) {
+    return игрок.body.bottom <= площадка.body.top + 14;
+  }
+
   rideMovers() {
     this.ridingMover = null;
 
