@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Капибара — редактор этапов</title>
+    <style>
+      :root {
+        --фон: #f4efe6;
+        --панель: #fffdf8;
+        --рамка: #d9cdb8;
+        --текст: #3a3128;
+        --акцент: #4a8f3c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.4 system-ui, sans-serif;
+        color: var(--текст);
+        background: var(--фон);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 8px 12px;
+        background: var(--панель);
+        border-bottom: 1px solid var(--рамка);
+      }
+      header h1 { font-size: 15px; margin: 0 12px 0 0; }
+      button, select {
+        font: inherit;
+        padding: 5px 10px;
+        border: 1px solid var(--рамка);
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--акцент); }
+      button.главная {
+        background: var(--акцент);
+        color: #fff;
+        border-color: var(--акцент);
+        width: 100%;
+        padding: 8px;
+        margin-top: 10px;
+      }
+      #стол { flex: 1; display: flex; min-height: 0; }
+      aside {
+        width: 232px;
+        overflow-y: auto;
+        padding: 10px;
+        background: var(--панель);
+        border-right: 1px solid var(--рамка);
+      }
+      #панель { border-right: none; border-left: 1px solid var(--рамка); width: 268px; }
+      #поле { flex: 1; overflow: auto; padding: 10px; }
+      canvas#холст { display: block; image-rendering: auto; cursor: crosshair; }
+      .группа h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #8b7c66; margin: 12px 0 6px; }
+      .сетка { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+      .знак {
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 4px 2px; font-size: 10px; line-height: 1.1; text-align: center;
+      }
+      .знак.выбран { border-color: var(--акцент); background: #eaf5e6; }
+      #панель h3 { margin-top: 0; }
+      #панель h4 { margin: 14px 0 6px; font-size: 12px; color: #8b7c66; }
+      #панель label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
+      #панель input { width: 84px; font: inherit; padding: 3px 6px; border: 1px solid var(--рамка); border-radius: 5px; }
+      #панель label.галка { justify-content: flex-start; }
+      #панель .монстры label { font-size: 12px; }
+      #панель .монстры input { width: 56px; }
+      .сноска { font-size: 11px; color: #8b7c66; margin: 6px 0 0; }
+      footer {
+        display: flex; gap: 16px; align-items: flex-start;
+        padding: 8px 12px; background: var(--панель); border-top: 1px solid var(--рамка);
+        max-height: 26vh; overflow-y: auto;
+      }
+      #претензии { margin: 0; padding-left: 18px; font-size: 12px; color: #a33; flex: 1; }
+      #претензии .хорошо { color: var(--акцент); }
+      #обменБлок { padding: 8px 12px; background: var(--панель); border-top: 1px solid var(--рамка); }
+      #обмен { width: 100%; height: 140px; font: 12px/1.4 monospace; }
+      .серое { color: #8b7c66; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Редактор этапов</h1>
+      <select id="этапы"></select>
+      <button id="открыть">Открыть этап</button>
+      <button id="пол">Постелить пол</button>
+      <button id="шире">+20 клеток</button>
+      <button id="отменить">Отменить</button>
+      <button id="мельче">−</button>
+      <button id="крупнее">+</button>
+      <button id="проверить">Проверить</button>
+      <button id="экспорт">Экспорт</button>
+      <button id="импорт">Импорт</button>
+      <button id="играть">Играть</button>
+      <span class="серое">Знак: <b id="текущий">—</b> · <span id="размер"></span></span>
+    </header>
+
+    <div id="стол">
+      <aside id="палитра"></aside>
+      <div id="поле"><canvas id="холст"></canvas></div>
+      <aside id="панель"></aside>
+    </div>
+
+    <div id="обменБлок" hidden>
+      <textarea id="обмен" spellcheck="false" placeholder="Сюда попадает карта при экспорте; сюда же вставьте строки для импорта"></textarea>
+    </div>
+
+    <footer>
+      <span id="строка" class="серое"></span>
+      <ul id="претензии"></ul>
+    </footer>
+
+    <script type="module" src="/src/editor/main.js"></script>
+  </body>
+</html>

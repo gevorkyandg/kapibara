@@ -398,7 +398,32 @@ export function routeOf(levelIndex) {
 export function buildLevelMap(levelIndex) {
   const level = LEVELS[levelIndex];
   if (!level) throw new Error(`Нет этапа с номером ${levelIndex}`);
+
+  // Проба из редактора идёт первой и только в разработке: в собранной игре
+  // этой ветки нет вовсе, чтобы чужой localStorage не мог подменить этап.
+  const проба = картаИзРедактора(levelIndex);
+  if (проба) return проба;
+
+  // Нарисованный этап несёт карту с собой. Правила генератора — монеты не у
+  // костра, монстры не у старта, сердечко после трудного места — на неё не
+  // распространяются: за них отвечает тот, кто рисовал.
+  if (level.карта) return level.карта.slice();
+
   return generateStage({ seed: levelIndex + 1, ...level.generate });
+}
+
+/** Карта, нарисованная в редакторе и отправленная в игру на пробу. */
+function картаИзРедактора(levelIndex) {
+  if (!import.meta.env.DEV) return null;
+  try {
+    const сырое = localStorage.getItem('capybara-редактор-карта');
+    if (!сырое) return null;
+    const { этап, строки } = JSON.parse(сырое);
+    if (этап !== levelIndex || !Array.isArray(строки) || !строки.length) return null;
+    return строки;
+  } catch {
+    return null;
+  }
 }
 
 /** Сколько монет на этапе. Нужно и для процента, и для цен в магазине. */

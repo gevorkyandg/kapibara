@@ -25,6 +25,16 @@ export class BootScene extends Phaser.Scene {
     // Game Ready. Неработающий вызов — частая причина отказа модерации.
     platform.ready();
 
+    // Редактор открывает игру ссылкой вида ?этап=3 — чтобы пробовать
+    // нарисованное сразу, не проходя меню. Только в разработке.
+    const этап = import.meta.env.DEV
+      ? Number(new URLSearchParams(location.search).get('этап'))
+      : NaN;
+    if (Number.isInteger(этап) && этап >= 0) {
+      this.scene.start('GameScene', { levelIndex: этап });
+      return;
+    }
+
     this.scene.start('MenuScene');
   }
 }
