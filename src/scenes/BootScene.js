@@ -27,9 +27,14 @@ export class BootScene extends Phaser.Scene {
 
     // Редактор открывает игру ссылкой вида ?этап=3 — чтобы пробовать
     // нарисованное сразу, не проходя меню. Только в разработке.
-    const этап = import.meta.env.DEV
-      ? Number(new URLSearchParams(location.search).get('этап'))
-      : NaN;
+    //
+    // Сначала проверяем, что параметр вообще есть: без него get вернёт null,
+    // а Number(null) — это ноль, и игра приняла бы пустую ссылку за приказ
+    // запустить первый этап, минуя меню.
+    const параметр = import.meta.env.DEV
+      ? new URLSearchParams(location.search).get('этап')
+      : null;
+    const этап = параметр === null || параметр === '' ? NaN : Number(параметр);
     if (Number.isInteger(этап) && этап >= 0) {
       this.scene.start('GameScene', { levelIndex: этап });
       return;
