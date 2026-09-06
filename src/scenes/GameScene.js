@@ -1747,7 +1747,7 @@ export class GameScene extends Phaser.Scene {
     // Пока капибара мигает после удара, монстры целы: за время неуязвимости
     // иначе выкашивалась бы целая полоса даром.
     if (time < this.invulnUntil) return;
-    this.neutralize(enemy);
+    this.neutralize(enemy, false);
     this.hurt(time, false, enemy.kind);
   }
 
@@ -2402,20 +2402,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Монстрик обезврежен — неважно, прыжком сверху или монеткой из рогатки.
-   * Опыт начисляем сразу: если игрок потом потеряет все жизни, старания
-   * всё равно зачтутся.
+   * Монстрик обезврежен — прыжком сверху, монеткой из рогатки или боковым
+   * столкновением. Опыт начисляем сразу: если игрок потом потеряет все жизни,
+   * старания всё равно зачтутся.
+   *
+   * @param {boolean} заслуженно давать ли опыт
+   *
+   * Опыт полагается за умение, а не за столкновение. Прыжок сверху и выстрел
+   * рогаткой — это попадание, за них платят. Врезаться в монстра боком умения
+   * не требует, и жизнь за это уже отдана: начислять сверху ещё и опыт значило
+   * бы поощрять размен, задуманный как крайняя мера.
    */
-  neutralize(enemy) {
+  neutralize(enemy, заслуженно = true) {
     this.убратьТревогу(enemy);
     enemy.disableBody(true, true);
     this.monstersDown += 1;
-    this.monsterXp += enemy.xpValue ?? XP.monster.easy;
-    addXp(enemy.xpValue ?? XP.monster.easy);
-    this.checkLevelUp();
+    if (заслуженно) {
+      const опыт = enemy.xpValue ?? XP.monster.easy;
+      this.monsterXp += опыт;
+      addXp(опыт);
+      this.checkLevelUp();
+      this.floatLabel(enemy.x, enemy.y, `+${опыт}`);
+    }
     sfx.pop();
     this.puff(enemy.x, enemy.y, 0x8ed081);
-    this.floatLabel(enemy.x, enemy.y, `+${XP.monster.easy}`);
   }
 
   /**
