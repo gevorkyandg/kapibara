@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { createTextures } from '../art.js';
+import { задатьИспытание } from '../save.js';
 import { loadSave } from '../save.js';
 import { setLanguage } from '../i18n.js';
 import { platform } from '../platform/index.js';
@@ -31,6 +32,17 @@ export class BootScene extends Phaser.Scene {
     // Сначала проверяем, что параметр вообще есть: без него get вернёт null,
     // а Number(null) — это ноль, и игра приняла бы пустую ссылку за приказ
     // запустить первый этап, минуя меню.
+    // Условия пробы (уровень героя, купленные умения) редактор кладёт рядом
+    // с картой. Прогресс игрока они не трогают — только эту вкладку.
+    if (import.meta.env.DEV) {
+      try {
+        const проба = JSON.parse(localStorage.getItem('capybara-редактор-карта') || 'null');
+        if (проба?.тест) задатьИспытание(проба.тест);
+      } catch {
+        // Мусор в хранилище — не повод не запускать игру.
+      }
+    }
+
     const параметр = import.meta.env.DEV
       ? new URLSearchParams(location.search).get('этап')
       : null;

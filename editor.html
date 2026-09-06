@@ -50,6 +50,31 @@
         margin-top: 10px;
       }
       #стол { flex: 1; display: flex; min-height: 0; }
+      #левая {
+        width: 232px;
+        overflow-y: auto;
+        padding: 10px;
+        background: var(--панель);
+        border-right: 1px solid var(--рамка);
+      }
+      .сообщение {
+        flex: 1;
+        min-width: 180px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #eaf5e6;
+        color: #2f6b24;
+        font-size: 13px;
+      }
+      .сообщение:empty { background: none; }
+      #старт h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #8b7c66; margin: 14px 0 6px; }
+      #старт .строка { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; }
+      #старт .строка canvas { flex: none; }
+      #старт .строка span.имя { flex: 1; }
+      #старт select { font: inherit; font-size: 11px; padding: 1px 3px; border: 1px solid var(--рамка); border-radius: 5px; }
+      #старт input[type="number"] { width: 56px; font: inherit; padding: 3px 6px; border: 1px solid var(--рамка); border-radius: 5px; }
+      #старт .уровень { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      #старт .сноска { font-size: 10px; line-height: 1.3; }
       aside {
         width: 232px;
         overflow-y: auto;
@@ -110,10 +135,14 @@
       <button id="импорт">Импорт</button>
       <button id="играть">Играть</button>
       <span class="серое">Знак: <b id="текущий">—</b> · <span id="размер"></span></span>
+      <span id="строка" class="сообщение"></span>
     </header>
 
     <div id="стол">
-      <aside id="палитра"></aside>
+      <aside id="левая">
+        <div id="палитра"></div>
+        <div id="старт"></div>
+      </aside>
       <div id="поле"><canvas id="холст"></canvas></div>
       <aside id="панель"></aside>
     </div>
@@ -123,7 +152,6 @@
     </div>
 
     <footer>
-      <span id="строка" class="серое"></span>
       <ul id="претензии"></ul>
     </footer>
 

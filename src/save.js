@@ -34,6 +34,22 @@ let dirty = false;
 let lastWrite = 0;
 let timer = null;
 
+/**
+ * Подставной герой — только для пробы из редактора.
+ *
+ * Трудное место проверяют не с тем героем, что есть, а с тем, на кого оно
+ * рассчитано: с двойным прыжком, с рогаткой, десятого уровня. Настоящий
+ * прогресс при этом трогать нельзя — испытание живёт в памяти и исчезает
+ * вместе с вкладкой.
+ *
+ * В собранной игре его не бывает: ставится он только из ветки разработки.
+ */
+let испытание = null;
+
+export function задатьИспытание(что) {
+  испытание = import.meta.env.DEV ? что : null;
+}
+
 export function getSave() {
   return data;
 }
@@ -104,7 +120,7 @@ export function addXp(amount) {
 }
 
 export function getLevel() {
-  return levelFromXp(data.xp);
+  return испытание ? испытание.уровень : levelFromXp(data.xp);
 }
 
 /** Прибавки к скорости, прыжку и жизням от текущего уровня. */
@@ -124,7 +140,7 @@ export function getMaxLives() {
 // ── Магазин ────────────────────────────────────────────────────────────────
 
 export function hasItem(id) {
-  return Boolean(data.items[id]);
+  return испытание ? Boolean(испытание.предметы?.[id]) : Boolean(data.items[id]);
 }
 
 /** @returns {boolean} удалось ли купить */
@@ -139,6 +155,7 @@ export function buyItem(id, price) {
 
 /** Сколько раз способность уже улучшена. */
 export function getUpgrade(id) {
+  if (испытание) return испытание.улучшения?.[id] || 0;
   return data.upgrades?.[id] || 0;
 }
 
@@ -188,6 +205,7 @@ export function getAbility(id) {
 }
 
 export function getExtraLives() {
+  if (испытание) return испытание.жизни || 0;
   return data.extraLives || 0;
 }
 
