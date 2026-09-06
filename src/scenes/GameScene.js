@@ -9,7 +9,7 @@ import {
   HIVE,
   DEBUG,
 } from '../config.js';
-import { LEVELS, ROUTES, routeOf, buildLevelMap, countCoins } from '../levels.js';
+import { LEVELS, ROUTES, routeOf, buildLevelMap, countCoins, деталиЭтапа } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCoordRuler } from '../coords.js';
 import { начатьЗабег, отметитьСмерть, закончитьЗабег } from '../telemetry.js';
@@ -160,6 +160,7 @@ export class GameScene extends Phaser.Scene {
     this.map = buildLevelMap(this.levelIndex);
     this.cols = this.map[0].length;
     this.rows = this.map.length;
+    this.детали = деталиЭтапа(this.levelIndex);
     this.worldW = this.cols * TILE;
     this.worldH = this.rows * TILE;
 
@@ -315,9 +316,19 @@ export class GameScene extends Phaser.Scene {
         const ch = this.map[row][col];
         if (ch === ' ') continue;
 
-        const cx = col * TILE + TILE / 2;
-        const cy = row * TILE + TILE / 2;
-        const top = row * TILE;
+        // Подробности клетки: сдвиг внутри неё и размах хода платформы.
+        // Их несут только рисованные этапы — у сгенерированных всё стоит
+        // ровно по клеткам, и таблица пуста.
+        const детали = this.детали[`${col}:${row}`];
+        const сдвигX = ((детали?.сдвиг?.[0] ?? 0) * TILE) / 2;
+        const сдвигY = ((детали?.сдвиг?.[1] ?? 0) * TILE) / 2;
+
+        // Рельеф сдвигать нельзя: земля и склоны — это плитки, они держат
+        // сетку мира. Сдвиг живёт только у того, что стоит на ней предметом.
+        const рельеф = ch === '#' || ch === '/' || ch === '\\';
+        const cx = col * TILE + TILE / 2 + (рельеф ? 0 : сдвигX);
+        const cy = row * TILE + TILE / 2 + (рельеф ? 0 : сдвигY);
+        const top = row * TILE + (рельеф ? 0 : сдвигY);
 
         switch (ch) {
           case '#': {
@@ -465,7 +476,10 @@ export class GameScene extends Phaser.Scene {
 
             mover.axis = ch === '-' ? 'x' : 'y';
             mover.speed = ch === '-' ? 80 : 60;
-            const range = ch === '-' ? 170 : 130;
+            // Размах задаётся этапом, если он о нём сказал: в редакторе ход
+            // платформы виден зелёной линией и тянется мышью. Не сказал —
+            // стандартный патруль.
+            const range = детали?.размах ?? (ch === '-' ? 170 : 130);
 
             // Качается вокруг своего места, а не уезжает от него. Иначе в
             // цепочке через пропасть промежутки перестают быть одинаковыми:
