@@ -45,6 +45,40 @@ initPlatform().then(() => {
   // В собранной версии этой строки нет.
   if (import.meta.env.DEV) window.__game = game;
 
+  // Быстрый запуск из редактора.
+  //
+  // Раньше кнопка «Играть» открывала игру заново: полная загрузка страницы,
+  // полтораста запросов и заново испечённые текстуры — несколько секунд на
+  // каждую пробу. Теперь редактор держит игру уже загруженной в соседнем
+  // окне и просто просит перезапустить сцену: карту она перечитает сама, а
+  // всё остальное у неё уже готово.
+  if (import.meta.env.DEV) {
+    window.addEventListener('message', async (событие) => {
+      if (событие.origin !== location.origin) return;
+      const весть = событие.data;
+      if (!весть || typeof весть !== 'object') return;
+
+      if (весть.капибара === 'играть') {
+        const { задатьИспытание } = await import('./save.js');
+        try {
+          const проба = JSON.parse(localStorage.getItem('capybara-редактор-карта') || 'null');
+          задатьИспытание(проба?.тест ?? null);
+        } catch {
+          задатьИспытание(null);
+        }
+        game.scene.stop('ResultScene');
+        game.scene.stop('GameScene');
+        game.scene.start('GameScene', { levelIndex: Number(весть.этап) || 0 });
+      }
+
+      if (весть.капибара === 'стоп') {
+        game.scene.stop('GameScene');
+        game.scene.stop('ResultScene');
+        game.scene.start('MenuScene');
+      }
+    });
+  }
+
   // Пауза со стороны площадки (реклама, сворачивание) — сцена сама решит,
   // что с этим делать. Подписываемся один раз здесь, а не в сцене, чтобы
   // обработчики не копились при каждом перезапуске уровня.
