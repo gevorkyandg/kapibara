@@ -1105,12 +1105,12 @@ export class GameScene extends Phaser.Scene {
       return circle;
     };
 
-    mkPad(110, GAME_HEIGHT - 100, 62, '◀', () => (this.touch.left = true), () => (this.touch.left = false));
-    mkPad(255, GAME_HEIGHT - 100, 62, '▶', () => (this.touch.right = true), () => (this.touch.right = false));
+    this.сделатьДжойстик();
+
     mkPad(
       GAME_WIDTH - 110,
       GAME_HEIGHT - 100,
-      70,
+      84,
       '▲',
       () => {
         this.touch.jumpQueued = true;
@@ -1131,6 +1131,97 @@ export class GameScene extends Phaser.Scene {
         () => (this.touch.boost = false)
       );
     }
+  }
+
+  /**
+   * Динамичный джойстик.
+   *
+   * Две неподвижные кнопки «влево-вправо» требовали смотреть на них: палец
+   * соскальзывал, и капибара останавливалась посреди прыжка. Джойстик решает это
+   * иначе: он появляется там, где палец коснулся экрана, и точка касания
+   * становится нулём. Смотреть больше некуда: где взялся, там
+   * и центр.
+   *
+   * Ловим касание во всей левой нижней четверти, а не по кружку: попасть в
+   * кружок на бегу трудно, а промахнуться мимо четверти экрана — почти
+   * невозможно. Правая половина оставлена прыжку и умениям.
+   *
+   * Отпустили — джойстик уезжает домой. Он полупрозрачный и без стрелок:
+   * стрелки на нём — подсказка для первого раза, а мешают всегда.
+   */
+  сделатьДжойстик() {
+    const домX = 150;
+    const домY = GAME_HEIGHT - 130;
+    const ОСНОВАНИЕ = 78;
+    const ГОЛОВКА = 40;
+    const МЁРТВАЯ = 14; // меньше этого сдвига считаем, что палец просто лежит
+
+    const основание = this.add
+      .circle(домX, домY, ОСНОВАНИЕ, 0xffffff, 0.16)
+      .setStrokeStyle(4, 0xffffff, 0.34)
+      .setScrollFactor(0)
+      .setDepth(99);
+    const головка = this.add
+      .circle(домX, домY, ГОЛОВКА, 0xffffff, 0.3)
+      .setStrokeStyle(3, 0xffffff, 0.5)
+      .setScrollFactor(0)
+      .setDepth(99);
+
+    this.джойстик = { палец: null, x: домX, y: домY };
+
+    const поставить = (x, y) => {
+      this.джойстик.x = x;
+      this.джойстик.y = y;
+      основание.setPosition(x, y);
+      головка.setPosition(x, y);
+    };
+
+    const вести = (указатель) => {
+      const dx = Phaser.Math.Clamp(указатель.x - this.джойстик.x, -ОСНОВАНИЕ, ОСНОВАНИЕ);
+      const dy = Phaser.Math.Clamp(указатель.y - this.джойстик.y, -ОСНОВАНИЕ, ОСНОВАНИЕ);
+      головка.setPosition(this.джойстик.x + dx, this.джойстик.y + dy);
+      this.touch.left = dx < -МЁРТВАЯ;
+      this.touch.right = dx > МЁРТВАЯ;
+    };
+
+    const отпустить = () => {
+      this.джойстик.палец = null;
+      this.touch.left = false;
+      this.touch.right = false;
+      // Возвращается плавно: рывок на месте читался бы как сбой.
+      this.tweens.add({
+        targets: [основание, головка],
+        x: домX,
+        y: домY,
+        duration: 160,
+        ease: 'Quad.easeOut',
+        onComplete: () => поставить(домX, домY),
+      });
+      this.джойстик.x = домX;
+      this.джойстик.y = домY;
+    };
+
+    const вЧетверти = (указатель) =>
+      указатель.x < GAME_WIDTH * 0.5 && указатель.y > GAME_HEIGHT * 0.45;
+
+    this.input.on('pointerdown', (указатель) => {
+      if (this.джойстик.палец !== null || this.isPaused || this.finished) return;
+      if (!вЧетверти(указатель)) return;
+      unlockAudio();
+      this.джойстик.палец = указатель.id;
+      this.tweens.killTweensOf([основание, головка]);
+      поставить(указатель.x, указатель.y);
+    });
+
+    this.input.on('pointermove', (указатель) => {
+      if (указатель.id === this.джойстик.палец) вести(указатель);
+    });
+
+    const конец = (указатель) => {
+      if (указатель.id === this.джойстик.палец) отпустить();
+    };
+    this.input.on('pointerup', конец);
+    this.input.on('pointerupoutside', конец);
   }
 
   // ── Ход игры ─────────────────────────────────────────────────────────────
