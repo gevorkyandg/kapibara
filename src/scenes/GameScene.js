@@ -17,6 +17,7 @@ import {
   countCoins,
   деталиЭтапа,
   правилаЭтапа,
+  этоПроба,
 } from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCoordRuler } from '../coords.js';
@@ -255,9 +256,10 @@ export class GameScene extends Phaser.Scene {
     this.монетыВзяты = new Set();
 
     const место = routeOf(this.levelIndex);
-    // Свои этапы в статистику не идут: сорок проб трудного места смешались
-    // бы с настоящими забегами игроков, и цифры перестали бы что-то значить.
-    this.забег = LEVELS[this.levelIndex]?.свой
+    // Проба из редактора в статистику не идёт: сорок заходов на трудное
+    // место смешались бы с настоящими забегами игроков, и цифры перестали бы
+    // что-то значить.
+    this.забег = этоПроба()
       ? null
       : начатьЗабег({
           маршрут: место.route + 1,
@@ -1053,9 +1055,16 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Подсказка по управлению в начале первого этапа — с учётом покупок. */
+  /**
+   * Подсказка по управлению в начале первого этапа — с учётом покупок.
+   *
+   * На телефоне её нет: там ни стрелок, ни пробела, а джойстик показывает
+   * себя сам — он лежит на экране и появляется под пальцем. Текст про клавиши
+   * там только врал бы.
+   */
   useTouchHint() {
     if (this.levelIndex > 0) return '';
+    if (this.sys.game.device.input.touch && !this.sys.game.device.os.desktop) return '';
     const lines = [t('hintMove'), t('hintJump')];
     if (hasItem('speedBoost')) lines.push(t('hintBoost'));
     if (hasItem('cloak')) lines.push(t('hintCloak'));

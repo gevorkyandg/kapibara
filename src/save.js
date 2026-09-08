@@ -9,7 +9,6 @@
  */
 
 import { platform } from './platform/index.js';
-import { LEVELS } from './levels.js';
 import { XP, levelFromXp, levelBonuses, MAX_LEVEL } from './progression.js';
 import { ABILITIES, MIN_COOLDOWN } from './config.js';
 
@@ -228,20 +227,8 @@ export function buyExtraLife(price) {
  *
  * @returns {number} сколько опыта начислено за этап
  */
-/**
- * Под каким ключом хранится итог этапа.
- *
- * У своих этапов ключ по названию, а не по номеру. Номера они занимают сразу
- * за кампанией, и если кампания однажды подрастёт, её новый этап унаследовал
- * бы чужие звёзды и время — итог загруженной пробы, которой давно нет.
- */
-function ключЭтапа(index) {
-  const этап = LEVELS[index];
-  return этап?.свой ? `свой:${этап.name}` : String(index);
-}
-
 export function recordStage(index, { percent, stars, timeMs, опыт }) {
-  const key = ключЭтапа(index);
+  const key = String(index);
   const prev = data.levels[key] || { stars: 0, best: 0, bestTime: 0 };
 
   // Сколько платит этап, решает он сам, если у него об этом сказано: длинный
@@ -265,15 +252,12 @@ export function recordStage(index, { percent, stars, timeMs, опыт }) {
 }
 
 export function getLevelResult(index) {
-  return data.levels[ключЭтапа(index)] || { stars: 0, best: 0, bestTime: 0 };
+  return data.levels[String(index)] || { stars: 0, best: 0, bestTime: 0 };
 }
 
 /** Первый этап открыт всегда, следующий — когда предыдущий пройден. */
 export function isLevelUnlocked(index) {
   if (index === 0) return true;
-  // Загруженные этапы не запираются: их порядок — порядок загрузки, а не
-  // замысел кампании, и требовать звезду с предыдущего было бы бессмыслицей.
-  if (LEVELS[index]?.свой) return true;
   return getLevelResult(index - 1).stars > 0;
 }
 

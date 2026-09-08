@@ -83,8 +83,13 @@
         border-right: 1px solid var(--рамка);
       }
       #панель { border-right: none; border-left: 1px solid var(--рамка); width: 268px; }
-      #поле { flex: 1; overflow: auto; padding: 10px; }
-      canvas#холст { display: block; image-rendering: auto; cursor: crosshair; }
+      /* min-width: 0 обязателен: без него флекс-колонка растягивается под
+         ширину распорки — а распорка бывает в двадцать тысяч пикселей. */
+      #поле { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 10px; }
+      /* Распорка во всю карту даёт прокрутку, а холст размером с окно
+         ездит по ней: браузер не умеет холсты шире шестнадцати тысяч. */
+      #полотно { position: relative; }
+      canvas#холст { position: absolute; left: 0; top: 0; display: block; cursor: crosshair; }
       .группа h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #8b7c66; margin: 12px 0 6px; }
       .сетка { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
       .знак {
@@ -159,7 +164,7 @@
         <div id="палитра"></div>
         <div id="старт"></div>
       </aside>
-      <div id="поле"><canvas id="холст"></canvas></div>
+      <div id="поле"><div id="полотно"><canvas id="холст"></canvas></div></div>
       <aside id="панель"></aside>
     </div>
 

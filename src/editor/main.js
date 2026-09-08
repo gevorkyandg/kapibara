@@ -332,6 +332,13 @@ function нарисоватьСхему() {
 
   холст.width = колонок * клетка;
   холст.height = рядовСхемы * клетка;
+  // Схема помещается в окно целиком, поэтому ни прокрутки, ни сдвига.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  холст.style.left = '0px';
+  холст.style.top = '0px';
+  const полотно = document.getElementById('полотно');
+  полотно.style.width = `${холст.width}px`;
+  полотно.style.height = `${холст.height}px`;
 
   ctx.fillStyle = '#8fd6f2';
   ctx.fillRect(0, 0, холст.width, холст.height);
@@ -352,47 +359,93 @@ function нарисоватьСхему() {
     `схема: ${колонок} × ${рядовСхемы} клеток · ${колонок * КЛЕТКА} px`;
 }
 
+/**
+ * Подогнать холст под видимое окно.
+ *
+ * Раньше холст был размером во всю карту, и на большой карте это переставало
+ * работать вовсе: 600 клеток на масштабе 0.6 — это двадцать одна тысяча
+ * пикселей в ширину, а браузер держит около шестнадцати. Дальше он просто
+ * отказывается рисовать, и редактор показывает пустоту.
+ *
+ * Теперь холст всегда размером с окно, а под ним лежит распорка во всю карту
+ * — она и даёт полосы прокрутки. Рисуем только то, что видно, со сдвигом на
+ * прокрутку: сколько бы клеток ни было, работы всегда на один экран.
+ */
+function подогнатьХолст() {
+  const поле = document.getElementById('поле');
+  const кл = КЛЕТКА * состояние.масштаб;
+  const полотно = document.getElementById('полотно');
+
+  полотно.style.width = `${Math.max(1, ширина() * кл)}px`;
+  полотно.style.height = `${Math.max(1, рядов() * кл)}px`;
+
+  // Пока страница раскладывается, окно бывает нулевым — берём хоть
+  // что-нибудь, иначе холст выйдет в пять пикселей и покажет пустоту.
+  const окноШ = поле.clientWidth || 800;
+  const окноВ = поле.clientHeight || 500;
+  const ш = Math.min(окноШ, ширина() * кл);
+  const в = Math.min(окноВ, рядов() * кл);
+  if (холст.width !== Math.ceil(ш)) холст.width = Math.ceil(ш);
+  if (холст.height !== Math.ceil(в)) холст.height = Math.ceil(в);
+  холст.style.left = `${поле.scrollLeft}px`;
+  холст.style.top = `${поле.scrollTop}px`;
+
+  return { сдвигX: поле.scrollLeft, сдвигY: поле.scrollTop, ш: холст.width, в: холст.height };
+}
+
 function перерисовать() {
   if (состояние.схема) {
     нарисоватьСхему();
     return;
   }
   const кл = КЛЕТКА * состояние.масштаб;
-  холст.width = Math.max(1, ширина() * кл);
-  холст.height = рядов() * кл;
+  const { сдвигX, сдвигY, ш: виднаШирина, в: виднаВысота } = подогнатьХолст();
+
+  // Дальше рисуем в координатах карты: сдвиг берёт на себя холст.
+  ctx.setTransform(1, 0, 0, 1, -сдвигX, -сдвигY);
+
+  // Какие клетки попадают в окно — только их и трогаем.
+  const первыйCol = Math.max(0, Math.floor(сдвигX / кл) - 1);
+  const последнийCol = Math.min(ширина() - 1, Math.ceil((сдвигX + виднаШирина) / кл));
+  const первыйRow = Math.max(0, Math.floor(сдвигY / кл) - 1);
+  const последнийRow = Math.min(рядов() - 1, Math.ceil((сдвигY + виднаВысота) / кл));
+  const левый = сдвигX;
+  const правый = сдвигX + виднаШирина;
+  const верхний = сдвигY;
+  const нижний = сдвигY + виднаВысота;
 
   // Небо и сетка.
   ctx.fillStyle = '#8fd6f2';
-  ctx.fillRect(0, 0, холст.width, холст.height);
+  ctx.fillRect(левый, верхний, виднаШирина, виднаВысота);
   // Подклетки: каждая клетка делится на четыре. По ним ставятся предметы
   // со сдвигом — и по ним же удобно мерить на глаз.
   ctx.strokeStyle = 'rgba(0,0,0,0.04)';
   ctx.lineWidth = 1;
-  for (let c = 0; c <= ширина() * 2; c++) {
+  for (let c = первыйCol * 2; c <= (последнийCol + 1) * 2; c++) {
     ctx.beginPath();
-    ctx.moveTo((c * кл) / 2 + 0.5, 0);
-    ctx.lineTo((c * кл) / 2 + 0.5, холст.height);
+    ctx.moveTo((c * кл) / 2 + 0.5, верхний);
+    ctx.lineTo((c * кл) / 2 + 0.5, нижний);
     ctx.stroke();
   }
-  for (let r = 0; r <= рядов() * 2; r++) {
+  for (let r = первыйRow * 2; r <= (последнийRow + 1) * 2; r++) {
     ctx.beginPath();
-    ctx.moveTo(0, (r * кл) / 2 + 0.5);
-    ctx.lineTo(холст.width, (r * кл) / 2 + 0.5);
+    ctx.moveTo(левый, (r * кл) / 2 + 0.5);
+    ctx.lineTo(правый, (r * кл) / 2 + 0.5);
     ctx.stroke();
   }
 
   ctx.strokeStyle = 'rgba(0,0,0,0.08)';
   ctx.lineWidth = 1;
-  for (let c = 0; c <= ширина(); c++) {
+  for (let c = первыйCol; c <= последнийCol + 1; c++) {
     ctx.beginPath();
-    ctx.moveTo(c * кл + 0.5, 0);
-    ctx.lineTo(c * кл + 0.5, холст.height);
+    ctx.moveTo(c * кл + 0.5, верхний);
+    ctx.lineTo(c * кл + 0.5, нижний);
     ctx.stroke();
   }
-  for (let r = 0; r <= рядов(); r++) {
+  for (let r = первыйRow; r <= последнийRow + 1; r++) {
     ctx.beginPath();
-    ctx.moveTo(0, r * кл + 0.5);
-    ctx.lineTo(холст.width, r * кл + 0.5);
+    ctx.moveTo(левый, r * кл + 0.5);
+    ctx.lineTo(правый, r * кл + 0.5);
     ctx.stroke();
   }
 
@@ -400,16 +453,16 @@ function перерисовать() {
   ctx.strokeStyle = 'rgba(40,90,40,0.45)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, (ПОЛ + состояние.верх) * кл);
-  ctx.lineTo(холст.width, (ПОЛ + состояние.верх) * кл);
+  ctx.moveTo(левый, (ПОЛ + состояние.верх) * кл);
+  ctx.lineTo(правый, (ПОЛ + состояние.верх) * кл);
   ctx.stroke();
 
   // Сами знаки. Пока идёт перенос, клетки-источники рисуются пустыми: груз
   // уже в руках, и оставлять его призрак на старом месте нельзя — иначе не
   // видно, что именно переносится.
   const пер = состояние.перенос;
-  for (let row = 0; row < рядов(); row++) {
-    for (let col = 0; col < ширина(); col++) {
+  for (let row = первыйRow; row <= последнийRow; row++) {
+    for (let col = первыйCol; col <= последнийCol; col++) {
       if (пер && вРамке(рамкаГруза(пер), col, row)) continue;
       нарисоватьЗнак(взять(col, row), col, row, кл, взять(col, row - 1) === '#');
     }
@@ -442,8 +495,8 @@ function перерисовать() {
   // Ход движущихся платформ: зелёная линия с ручками на концах. Показывает
   // стандартный патруль, пока её не потянули, — так видно, куда платформа
   // доедет, ещё до запуска игры.
-  for (let row = 0; row < рядов(); row++) {
-    for (let col = 0; col < ширина(); col++) {
+  for (let row = первыйRow; row <= последнийRow; row++) {
+    for (let col = первыйCol; col <= последнийCol; col++) {
       const знак = взять(col, row);
       if (знак !== '-' && знак !== '|') continue;
       const { сx, сy, половина } = ходПлатформы(col, row, знак, кл);
@@ -496,11 +549,12 @@ function перерисовать() {
   // Линейка поверх карты: номер клетки и пиксель, как в отладочной строке
   // игры — чтобы найденное в игре место находилось и здесь.
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(0, 0, холст.width, 16);
+  ctx.fillRect(левый, верхний, виднаШирина, 16);
   ctx.fillStyle = '#fff';
   ctx.font = '10px monospace';
-  for (let col = 0; col < ширина(); col += 5) {
-    ctx.fillText(`${col}·${col * КЛЕТКА}`, col * кл + 2, 11);
+  const первыйЗнак = Math.floor(первыйCol / 5) * 5;
+  for (let col = первыйЗнак; col <= последнийCol; col += 5) {
+    ctx.fillText(`${col}·${col * КЛЕТКА}`, col * кл + 2, верхний + 11);
   }
 
   document.getElementById('размер').textContent =
@@ -517,17 +571,27 @@ let тянемХод = null; // растягиваем зелёную линию
 
 function клеткаПоСобытию(e) {
   const кл = КЛЕТКА * состояние.масштаб;
-  const r = холст.getBoundingClientRect();
+  const т = точкаПоСобытию(e);
   return {
-    col: Math.max(0, Math.min(ширина() - 1, Math.floor((e.clientX - r.left) / кл))),
-    row: Math.max(0, Math.min(рядов() - 1, Math.floor((e.clientY - r.top) / кл))),
+    col: Math.max(0, Math.min(ширина() - 1, Math.floor(т.x / кл))),
+    row: Math.max(0, Math.min(рядов() - 1, Math.floor(т.y / кл))),
   };
 }
 
-/** Где мышь на холсте, в его собственных пикселях. */
+/**
+ * Где мышь на карте, в её пикселях.
+ *
+ * Холст размером с окно и ездит по распорке, поэтому к его собственным
+ * координатам прибавляется прокрутка — иначе всё нарисованное встанет не туда,
+ * стоит только отлистать карту вбок.
+ */
 function точкаПоСобытию(e) {
   const r = холст.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  const поле = document.getElementById('поле');
+  return {
+    x: e.clientX - r.left + поле.scrollLeft,
+    y: e.clientY - r.top + поле.scrollTop,
+  };
 }
 
 /**
@@ -929,10 +993,10 @@ function буква(e) {
   return e.key.length === 1 ? e.key.toLowerCase() : '';
 }
 
-// Окно изменили — схему нужно вписать заново, она считается от его ширины.
-window.addEventListener('resize', () => {
-  if (состояние.схема) перерисовать();
-});
+// Прокрутили или изменили окно — перерисовываем: холст показывает только
+// видимый кусок карты и должен переехать вслед за глазами.
+document.getElementById('поле').addEventListener('scroll', () => перерисовать());
+window.addEventListener('resize', () => перерисовать());
 
 window.addEventListener('keydown', (e) => {
   // Пока набирают в поле состава, клавиши принадлежат полю, а не карте.
