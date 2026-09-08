@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { createBackground } from '../background.js';
-import { SHOP_ITEMS, upgradePrice } from '../shop.js';
+import { SHOP_ITEMS, upgradePrice, ценаЖизни } from '../shop.js';
 import {
   getSave,
   getLevel,
@@ -152,7 +152,8 @@ export class ShopScene extends Phaser.Scene {
     }
 
     if (item.kind === 'life') {
-      this.pay(() => buyExtraLife(item.price), item.price);
+      const цена = ценаЖизни(getExtraLives());
+      this.pay(() => buyExtraLife(цена), цена);
       return;
     }
 
@@ -203,8 +204,9 @@ export class ShopScene extends Phaser.Scene {
       state.setText(
         locked ? t('needLevel', { n: item.minLevel }) : t('boughtOf', { n: bought, m: MAX_BOUGHT_LIVES })
       );
-      const affordable = getSave().coins >= item.price;
-      price.value.setText(String(item.price));
+      const цена = ценаЖизни(bought);
+      const affordable = getSave().coins >= цена;
+      price.value.setText(String(цена));
       price.setAlpha(maxed ? 0.35 : 1);
       btn.label.setText(maxed ? t('bought') : t('buy'));
       btn.setEnabled(!maxed && !locked && affordable);

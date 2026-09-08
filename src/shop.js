@@ -1,29 +1,32 @@
 /**
  * Товары магазина.
  *
- * Две вещи задают цены и доступ:
- *  - требование по уровню игрока — прямо из ТЗ (ускорение 5, двойной прыжок 7,
- *    плащ 10, рогатка 12);
- *  - цена в монетах — от числа монет на первом этапе. Самый дешёвый товар
- *    стоит ровно один пройденный на 100% первый этап. Цена считается из карты
- *    уровня, поэтому правка levels.js двигает и цены.
- *
- * Цены в ТЗ не проставлены («Монеты: ?»), так что это наша калибровка —
- * перед публикацией её можно менять свободно, сохранения от этого не портятся.
+ * Цены и требования по уровню проставлены числами, а не выведены из числа
+ * монет на первом этапе, как было раньше. Так их видно с одного взгляда и
+ * можно править, не пересчитывая карту: правка этапа больше не двигает
+ * магазин у тех, кто уже играет.
  */
 
-import { countCoins } from './levels.js';
 import { ABILITIES } from './config.js';
 
-const BASE_PRICE = countCoins(0);
-const price = (multiplier) => Math.round((BASE_PRICE * multiplier) / 5) * 5;
+/**
+ * Дополнительные жизни дорожают резко: первая 50, вторая 150.
+ *
+ * Первая — это подстраховка новичку, и она должна быть по карману сразу.
+ * Вторая уже меняет правила этапа, поэтому за неё платят втрое.
+ */
+export const ЦЕНЫ_ЖИЗНЕЙ = [50, 150];
+
+export function ценаЖизни(куплено) {
+  return ЦЕНЫ_ЖИЗНЕЙ[Math.min(куплено, ЦЕНЫ_ЖИЗНЕЙ.length - 1)];
+}
 
 export const SHOP_ITEMS = [
   {
     id: 'extraLife',
     kind: 'life', // покупается несколько раз, а не один
-    minLevel: 3, // в ТЗ уровень не указан — поставили рано, жизнь нужна новичку
-    price: BASE_PRICE,
+    minLevel: 3, // жизнь нужна новичку раньше всего прочего
+    price: ЦЕНЫ_ЖИЗНЕЙ[0],
     icon: 'icon-heart',
     nameKey: 'extraLifeName',
     descKey: 'extraLifeDesc',
@@ -31,8 +34,8 @@ export const SHOP_ITEMS = [
   {
     id: 'speedBoost',
     kind: 'ability',
-    minLevel: 5,
-    price: price(1.5),
+    minLevel: 3,
+    price: 100,
     icon: 'icon-boost',
     nameKey: 'speedBoostName',
     descKey: 'speedBoostDesc',
@@ -41,8 +44,8 @@ export const SHOP_ITEMS = [
   {
     id: 'doubleJump',
     kind: 'ability',
-    minLevel: 7,
-    price: price(2),
+    minLevel: 5,
+    price: 130,
     icon: 'icon-jump',
     nameKey: 'doubleJumpName',
     descKey: 'doubleJumpDesc',
@@ -51,8 +54,8 @@ export const SHOP_ITEMS = [
   {
     id: 'cloak',
     kind: 'ability',
-    minLevel: 10,
-    price: price(3),
+    minLevel: 7,
+    price: 150,
     icon: 'icon-cloak',
     nameKey: 'cloakName',
     descKey: 'cloakDesc',
@@ -61,8 +64,8 @@ export const SHOP_ITEMS = [
   {
     id: 'slingshot',
     kind: 'ability',
-    minLevel: 12,
-    price: price(4),
+    minLevel: 10,
+    price: 200,
     icon: 'icon-slingshot',
     nameKey: 'slingshotName',
     descKey: 'slingshotDesc',
@@ -71,12 +74,17 @@ export const SHOP_ITEMS = [
 ];
 
 /**
- * Цена следующего улучшения способности. Каждое дороже предыдущего: первое
- * стоит половину самой способности, дальше прибавляется по четверти.
+ * Цена следующего улучшения: полсотни сверх прошлой цены.
+ *
+ * Цепочка простая и предсказуемая. Ускорение стоит 100 — значит его ступени
+ * идут по 150, 200, 250. Игроку не нужно гадать, во что обойдётся следующая:
+ * она всегда на полсотни дороже предыдущей покупки.
  *
  * @param {object} item товар из SHOP_ITEMS
  * @param {number} level сколько улучшений уже куплено
  */
+export const ШАГ_УЛУЧШЕНИЯ = 50;
+
 export function upgradePrice(item, level) {
-  return Math.round((item.price * (0.5 + 0.25 * level)) / 5) * 5;
+  return item.price + ШАГ_УЛУЧШЕНИЯ * (level + 1);
 }
