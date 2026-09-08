@@ -1,14 +1,12 @@
 @echo off
-chcp 65001 >nul
-rem Запуск игры одним щелчком: поднимает сервер разработки и открывает
-rem браузер сам, когда сервер готов. Окно нужно оставить открытым — пока
-rem оно живёт, работает и игра. Закрыть: Ctrl+C или крестик.
+rem ASCII only: cmd reads .bat in the OEM codepage, and Cyrillic here breaks
+rem the parser - lines fall apart into pieces. Messages come from Vite itself.
 cd /d "%~dp0"
-title Капибара — игра
-echo Поднимаю игру. Браузер откроется сам.
-echo Это окно не закрывайте: пока оно открыто, игра работает.
+title Kapibara - game
+echo Starting the game. The browser will open by itself.
+echo Keep this window open while you play. Ctrl+C stops the server.
 echo.
 call npm run dev -- --open /
 echo.
-echo Сервер остановлен.
+echo Server stopped.
 pause

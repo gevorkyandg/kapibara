@@ -1,14 +1,11 @@
 @echo off
-chcp 65001 >nul
-rem То же самое, но открывает редактор этапов. Сервер один и тот же: если он
-rem уже поднят соседним окном, второе не нужно — просто откройте
-rem http://localhost:5174/editor.html
+rem ASCII only: see the note in the game launcher next to this file.
 cd /d "%~dp0"
-title Капибара — редактор этапов
-echo Поднимаю редактор. Браузер откроется сам.
-echo Это окно не закрывайте: пока оно открыто, редактор работает.
+title Kapibara - level editor
+echo Starting the editor. The browser will open by itself.
+echo Keep this window open while you work. Ctrl+C stops the server.
 echo.
 call npm run dev -- --open /editor.html
 echo.
-echo Сервер остановлен.
+echo Server stopped.
 pause
