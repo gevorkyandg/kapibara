@@ -12,6 +12,7 @@ import {
   getMaxLives,
   hasItem,
   countPassedStages,
+  сброситьЕслиПросили,
   resetProgress,
   isSoundOn,
   setSound,
@@ -203,9 +204,28 @@ export class MenuScene extends Phaser.Scene {
   buildButtons() {
     const x = 960;
 
-    makeButton(this, x, 320, 380, 104, t('play'), () => this.scene.start('LevelSelectScene'), {
-      fontSize: 38,
-    });
+    // ДЛЯ ТЕСТОВ: перед выбором этапа игра сверяет метку сброса из config.js
+    // и, если та сменилась, один раз обнуляет прогресс. Сюда, а не в запуск:
+    // сброс должен случиться, когда человек собрался играть, а не пока он
+    // читает меню, — иначе он увидит обнулённые цифры до того, как поймёт,
+    // что произошло.
+    makeButton(
+      this,
+      x,
+      320,
+      380,
+      104,
+      t('play'),
+      () => {
+        if (сброситьЕслиПросили()) this.scene.restart();
+        else this.scene.start('LevelSelectScene');
+      },
+      {
+        fill: COLORS.accent,
+        edge: COLORS.accentEdge,
+        fontSize: 38,
+      }
+    );
 
     makeButton(this, x, 450, 380, 92, t('shop'), () => this.scene.start('ShopScene'), {
       fill: COLORS.green,
