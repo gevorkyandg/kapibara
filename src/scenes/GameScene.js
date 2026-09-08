@@ -9,7 +9,15 @@ import {
   HIVE,
   DEBUG,
 } from '../config.js';
-import { LEVELS, ROUTES, routeOf, buildLevelMap, countCoins, деталиЭтапа } from '../levels.js';
+import {
+  LEVELS,
+  ROUTES,
+  routeOf,
+  buildLevelMap,
+  countCoins,
+  деталиЭтапа,
+  правилаЭтапа,
+} from '../levels.js';
 import { createBackground } from '../background.js';
 import { createCoordRuler } from '../coords.js';
 import { начатьЗабег, отметитьСмерть, закончитьЗабег } from '../telemetry.js';
@@ -161,6 +169,7 @@ export class GameScene extends Phaser.Scene {
     this.cols = this.map[0].length;
     this.rows = this.map.length;
     this.детали = деталиЭтапа(this.levelIndex);
+    this.правила = правилаЭтапа(this.levelIndex);
     this.worldW = this.cols * TILE;
     this.worldH = this.rows * TILE;
 
@@ -562,6 +571,7 @@ export class GameScene extends Phaser.Scene {
             // Финиш — это не касание флажка, а вся область за ним: пробежал
             // черту и всё, этап пройден.
             this.finishX = cx;
+            this.finishY = cy;
             this.flag = this.physics.add
               .staticImage(cx, top + TILE - 50, 'flag')
               .setDepth(2);
@@ -1165,7 +1175,12 @@ export class GameScene extends Phaser.Scene {
     this.ruler?.обновить();
 
     // Пересекла финишную черту — этап пройден, где бы она ни была по высоте.
-    if (this.finishX != null && this.player.x >= this.finishX) {
+    // В лабиринте колонку с флажком игрок проходит на каждом этаже, поэтому
+    // там черта засчитывается только на своей высоте. На обычном этапе
+    // правило прежнее: пересёк по любой высоте — прошёл.
+    const наСвоейВысоте =
+      !this.правила?.финишПоВысоте || Math.abs(this.player.y - this.finishY) < TILE * 3;
+    if (this.finishX != null && this.player.x >= this.finishX && наСвоейВысоте) {
       this.finishLevel();
       return;
     }
