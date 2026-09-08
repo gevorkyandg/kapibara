@@ -10,7 +10,7 @@
 
 import { platform } from './platform/index.js';
 import { XP, levelFromXp, levelBonuses, MAX_LEVEL } from './progression.js';
-import { ABILITIES, MIN_COOLDOWN } from './config.js';
+import { ABILITIES, MIN_COOLDOWN, СБРОС_ПРОГРЕССА } from './config.js';
 
 const SAVE_INTERVAL = 3000;
 
@@ -25,6 +25,7 @@ const DEFAULT_SAVE = {
   upgrades: { doubleJump: 0, speedBoost: 0, cloak: 0, slingshot: 0 }, // сколько раз улучшено
   extraLives: 0, // купленные жизни, 0..MAX_BOUGHT_LIVES
   levels: {}, // { "0": { stars: 0..3, best: 0..1, bestTime: мс } }
+  сброс: '', // метка последнего общего сброса — сверяется при загрузке
   stats: { playMs: 0, coins: 0, treats: 0, monsters: 0, stages: 0 },
   sound: true,
 };
@@ -76,6 +77,18 @@ export async function loadSave() {
       data.v = 2;
     }
   }
+  // Общий сброс: в сборке объявлена метка, которой нет в сохранении, —
+  // значит эту версию просили начать с чистого листа. Звук не трогаем, он к
+  // прогрессу отношения не имеет.
+  if (СБРОС_ПРОГРЕССА && data.сброс !== СБРОС_ПРОГРЕССА) {
+    const звук = data.sound;
+    data = structuredClone(DEFAULT_SAVE);
+    data.sound = звук;
+    data.сброс = СБРОС_ПРОГРЕССА;
+    markDirty();
+    flush();
+  }
+
   return data;
 }
 

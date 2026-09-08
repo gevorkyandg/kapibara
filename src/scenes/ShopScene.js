@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { createBackground } from '../background.js';
 import { SHOP_ITEMS, upgradePrice, ценаЖизни } from '../shop.js';
+import { записатьПокупку } from '../telemetry.js';
 import {
   getSave,
   getLevel,
@@ -12,6 +13,8 @@ import {
   getAbility,
   buyExtraLife,
   getExtraLives,
+  countPassedStages,
+  getStats,
   MAX_BOUGHT_LIVES,
 } from '../save.js';
 import { t } from '../i18n.js';
@@ -153,26 +156,53 @@ export class ShopScene extends Phaser.Scene {
 
     if (item.kind === 'life') {
       const цена = ценаЖизни(getExtraLives());
-      this.pay(() => buyExtraLife(цена), цена);
+      this.pay(() => buyExtraLife(цена), цена, { товар: item.id, вид: 'life', ступень: getExtraLives() });
       return;
     }
 
     if (!hasItem(item.id)) {
-      this.pay(() => buyItem(item.id, item.price), item.price);
+      this.pay(() => buyItem(item.id, item.price), item.price, {
+        товар: item.id,
+        вид: 'buy',
+        ступень: 0,
+      });
       return;
     }
 
-    const next = upgradePrice(item, getUpgrade(item.id));
-    this.pay(() => buyUpgrade(item.id, next), next);
+    const ступень = getUpgrade(item.id);
+    const next = upgradePrice(item, ступень);
+    this.pay(() => buyUpgrade(item.id, next), next, {
+      товар: item.id,
+      вид: 'upgrade',
+      ступень: ступень + 1,
+    });
   }
 
-  /** Общая часть покупки: проверить монеты, купить, обновить витрину. */
-  pay(action, price) {
+  /**
+   * Общая часть покупки: проверить монеты, купить, обновить витрину.
+   *
+   * Заодно записываем покупку в статистику: что взяли, почём, на каком
+   * уровне и сколько осталось монет. Из забегов этого не восстановить, а без
+   * этого о ценах можно только гадать.
+   */
+  pay(action, price, что) {
     if (getSave().coins < price) {
       this.say(t('notEnough'));
       return;
     }
+    const монетДо = getSave().coins;
     if (!action()) return;
+    if (что) {
+      записатьПокупку({
+        ...что,
+        цена: price,
+        монетДо,
+        монетПосле: getSave().coins,
+        уровеньГероя: getLevel(),
+        этаповПройдено: countPassedStages(),
+        наиграно: getStats().playMs,
+      });
+    }
 
     sfx.buy();
     this.message.setText('');

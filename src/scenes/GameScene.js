@@ -34,6 +34,9 @@ import {
   getBonuses,
   getMaxLives,
   getLevel,
+  getUpgrade,
+  getExtraLives,
+  countPassedStages,
   getAbility,
   flush,
 } from '../save.js';
@@ -259,6 +262,18 @@ export class GameScene extends Phaser.Scene {
     // Проба из редактора в статистику не идёт: сорок заходов на трудное
     // место смешались бы с настоящими забегами игроков, и цифры перестали бы
     // что-то значить.
+    // Из чего сложился опыт забега и как именно убивали монстров. Считаем
+    // здесь, а не гадаем потом по карте: опыт платится за умение, и без этих
+    // счётчиков не видно, идут ли игроки на размен жизни вместо прыжка.
+    this.счёт = {
+      опытЗвёзды: 0,
+      опытМонстры: 0,
+      опытСладости: 0,
+      убитоПрыжком: 0,
+      убитоРогаткой: 0,
+      убитоКасанием: 0,
+    };
+
     this.забег = этоПроба()
       ? null
       : начатьЗабег({
@@ -266,6 +281,13 @@ export class GameScene extends Phaser.Scene {
           этап: место.stage + 1,
           уровеньГероя: this.levelAtStart,
           жизней: this.maxLives,
+          улучшения: Object.fromEntries(
+            ['speedBoost', 'doubleJump', 'cloak', 'slingshot'].map((и) => [и, getUpgrade(и)])
+          ),
+          купленоЖизней: getExtraLives(),
+          кошелёк: getSave().coins,
+          опыт: getSave().xp,
+          этаповПройдено: countPassedStages(),
           способности: ['speedBoost', 'doubleJump', 'cloak', 'slingshot'].filter((и) =>
             hasItem(и)
           ),
@@ -850,8 +872,14 @@ export class GameScene extends Phaser.Scene {
       { id: 'slingshot', key: 'icon-slingshot' },
     ].filter((a) => hasItem(a.id));
 
+    // На телефоне низ по краям занят джойстиком и кнопками, поэтому значки
+    // отката встают посередине: там пусто и они никому не мешают.
+    const наСенсоре = this.sys.game.device.input.touch && !this.sys.game.device.os.desktop;
     abilities.forEach((a, i) => {
-      const x = GAME_WIDTH - 80 - i * 96;
+      const шаг = 96;
+      const x = наСенсоре
+        ? GAME_WIDTH / 2 + (i - (abilities.length - 1) / 2) * шаг
+        : GAME_WIDTH - 80 - i * шаг;
       const y = GAME_HEIGHT - 80;
       const icon = fixed(this.add.image(x, y, a.key).setScale(0.78));
       const cooldown = fixed(this.add.graphics());
@@ -1093,18 +1121,37 @@ export class GameScene extends Phaser.Scene {
     const isTouch = this.sys.game.device.input.touch && !this.sys.game.device.os.desktop;
     if (!isTouch) return;
 
-    const mkPad = (x, y, radius, glyph, onDown, onUp) => {
+    /**
+     * Кнопка на экране.
+     *
+     * Знак на ней — либо картинка, либо символ шрифта. Умения носят те же
+     * значки, что в магазине и в шапке: одно умение — одна картинка, где бы
+     * она ни встретилась, иначе игрок каждый раз заново гадает, что нажимает.
+     *
+     * @param {object} что { значок } — текстура, или { знак } — символ
+     */
+    const mkPad = (x, y, radius, что, onDown, onUp) => {
       const circle = this.add
         .circle(x, y, radius, 0xffffff, 0.32)
         .setStrokeStyle(4, 0xffffff, 0.6)
         .setScrollFactor(0)
         .setDepth(99)
         .setInteractive(new Phaser.Geom.Circle(radius, radius, radius), Phaser.Geom.Circle.Contains);
-      this.add
-        .text(x, y, glyph, { fontFamily: FONT, fontSize: `${radius}px`, color: '#4a3524' })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(99);
+
+      if (что.значок) {
+        this.add
+          .image(x, y, что.значок)
+          .setScale((radius * 1.5) / 72)
+          .setScrollFactor(0)
+          .setDepth(99);
+      } else {
+        this.add
+          .text(x, y, что.знак, { fontFamily: FONT, fontSize: `${radius}px`, color: '#4a3524' })
+          .setOrigin(0.5)
+          .setScrollFactor(0)
+          .setDepth(99);
+      }
+
       circle.on('pointerdown', () => {
         unlockAudio();
         onDown();
@@ -1116,29 +1163,82 @@ export class GameScene extends Phaser.Scene {
 
     this.сделатьДжойстик();
 
+    // Прыжок стоит на одной высоте с джойстиком: большой палец правой руки
+    // ходит по той же дуге, что и левый, и тянуться вниз не приходится.
+    const прыжокX = GAME_WIDTH - 110;
+    const прыжокY = GAME_HEIGHT - 130;
+    const ПРЫЖОК_R = 92;
+    const УМЕНИЕ_R = 58;
+
     mkPad(
-      GAME_WIDTH - 110,
-      GAME_HEIGHT - 100,
-      84,
-      '▲',
+      прыжокX,
+      прыжокY,
+      ПРЫЖОК_R,
+      { знак: '▲' },
       () => {
         this.touch.jumpQueued = true;
-        this.touch.jumpHeld = true; // удержание нужно плащу
+        this.touch.jumpHeld = true; // удержание нужно парашюту
       },
       () => (this.touch.jumpHeld = false)
     );
-    if (hasItem('slingshot')) {
-      mkPad(GAME_WIDTH - 250, GAME_HEIGHT - 210, 48, '•', () => (this.touch.fireQueued = true));
-    }
+
+    // Откат рисуется прямо на кнопке — дублем к значкам в шапке. Взгляд во
+    // время игры и так на пальцах, а не на шапке.
+    this.откатыКнопок = [];
+    const сОткатом = (id, кнопка, x, y, radius) => {
+      const тень = this.add.graphics().setScrollFactor(0).setDepth(100);
+      this.откатыКнопок.push({ id, тень, x, y, radius, кнопка });
+    };
+
     if (hasItem('speedBoost')) {
-      mkPad(
-        GAME_WIDTH - 250,
-        GAME_HEIGHT - 90,
-        52,
-        '»',
+      const x = прыжокX - ПРЫЖОК_R - УМЕНИЕ_R - 20;
+      const кнопка = mkPad(
+        x,
+        прыжокY,
+        УМЕНИЕ_R,
+        { значок: 'icon-boost' },
         () => (this.touch.boost = true),
         () => (this.touch.boost = false)
       );
+      сОткатом('speedBoost', кнопка, x, прыжокY, УМЕНИЕ_R);
+    }
+
+    if (hasItem('slingshot')) {
+      const y = прыжокY - ПРЫЖОК_R - УМЕНИЕ_R - 20;
+      const кнопка = mkPad(прыжокX, y, УМЕНИЕ_R, { значок: 'icon-aim' }, () => {
+        this.touch.fireQueued = true;
+      });
+      сОткатом('slingshot', кнопка, прыжокX, y, УМЕНИЕ_R);
+    }
+  }
+
+  /**
+   * Тень отката поверх кнопки умения.
+   *
+   * То же, что кружок в шапке, только на самой кнопке: сектор темнеет и
+   * уходит по часовой, пока умение перезаряжается. Дубль намеренный —
+   * смотреть в шапку, держа палец на кнопке, неудобно.
+   */
+  обновитьОткатыКнопок(time) {
+    if (!this.откатыКнопок?.length) return;
+    for (const о of this.откатыКнопок) {
+      const готовность = { speedBoost: this.boostReadyAt, slingshot: this.slingReadyAt }[о.id];
+      const умение = о.id === 'speedBoost' ? this.boost : this.sling;
+      const осталось = Math.max(0, готовность - time);
+      о.тень.clear();
+      о.кнопка.setAlpha(осталось > 0 ? 0.55 : 1);
+      if (осталось <= 0) continue;
+      const доля = осталось / умение.cooldown;
+      о.тень.fillStyle(0x000000, 0.45);
+      о.тень.slice(
+        о.x,
+        о.y,
+        о.radius,
+        Phaser.Math.DegToRad(-90),
+        Phaser.Math.DegToRad(-90 + 360 * доля),
+        false
+      );
+      о.тень.fillPath();
     }
   }
 
@@ -1788,6 +1888,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateAbilityIcons(time) {
+    this.обновитьОткатыКнопок(time);
     this.abilityIcons.forEach((a) => {
       const readyAt = {
         doubleJump: this.doubleJumpReadyAt,
@@ -1840,6 +1941,7 @@ export class GameScene extends Phaser.Scene {
     // По ТЗ сладость даёт опыт, а не монеты, и на звёзды не влияет.
     this.treatsTaken += 1;
     this.treatXp += treat.xpValue;
+    if (this.счёт) this.счёт.опытСладости += treat.xpValue;
     addXp(treat.xpValue);
     this.checkLevelUp();
     sfx.treat();
@@ -1871,6 +1973,7 @@ export class GameScene extends Phaser.Scene {
 
     if (сверху) {
       this.player.setVelocityY(PHYS.bounceOnEnemy);
+      if (this.счёт) this.счёт.убитоПрыжком++;
       this.neutralize(enemy);
       return;
     }
@@ -1885,6 +1988,7 @@ export class GameScene extends Phaser.Scene {
     // Пока капибара мигает после удара, монстры целы: за время неуязвимости
     // иначе выкашивалась бы целая полоса даром.
     if (time < this.invulnUntil) return;
+    if (this.счёт) this.счёт.убитоКасанием++;
     this.neutralize(enemy, false);
     this.hurt(time, false, enemy.kind);
   }
@@ -2552,6 +2656,7 @@ export class GameScene extends Phaser.Scene {
       this.puff(x, y, 0xd8c0b8);
       return;
     }
+    if (this.счёт) this.счёт.убитоРогаткой++;
     this.neutralize(enemy);
   }
 
@@ -2574,6 +2679,7 @@ export class GameScene extends Phaser.Scene {
     if (заслуженно) {
       const опыт = enemy.xpValue ?? XP.monster.easy;
       this.monsterXp += опыт;
+      if (this.счёт) this.счёт.опытМонстры += опыт;
       addXp(опыт);
       this.checkLevelUp();
       this.floatLabel(enemy.x, enemy.y, `+${опыт}`);
@@ -2663,6 +2769,7 @@ export class GameScene extends Phaser.Scene {
         : 0;
     flush();
 
+    if (this.счёт) this.счёт.опытЗвёзды = stageXp;
     this.закрытьЗабег('finish', stars);
 
     stars > 0 ? sfx.win() : sfx.fail();
@@ -2714,6 +2821,7 @@ export class GameScene extends Phaser.Scene {
       монетВзято: this.coinsCollected,
       монетМимо: мимо,
       звёзд,
+      ...this.счёт,
     });
   }
 

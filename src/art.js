@@ -1075,6 +1075,20 @@ export function createTextures(scene) {
   g.strokeCircle(36, 34, 8);
   bake(g, 'icon-slingshot', 72, 72);
 
+  // Прицел: он же значок кнопки рогатки на телефоне. Рогулька из магазина
+  // на кнопке читается плохо — мелко и не про действие. Прицел говорит прямо:
+  // ткни, и полетит.
+  g.lineStyle(6, 0xffffff, 0.95);
+  g.strokeCircle(36, 36, 22);
+  g.lineStyle(5, 0xffffff, 0.95);
+  g.lineBetween(36, 4, 36, 20);
+  g.lineBetween(36, 52, 36, 68);
+  g.lineBetween(4, 36, 20, 36);
+  g.lineBetween(52, 36, 68, 36);
+  g.fillStyle(0xffffff, 0.95);
+  g.fillCircle(36, 36, 5);
+  bake(g, 'icon-aim', 72, 72);
+
   // Парашют плаща — висит над капибарой во время планирования
   g.fillStyle(0x8f7fd0, 1);
   g.lineStyle(4, 0x4b3f77, 1);
